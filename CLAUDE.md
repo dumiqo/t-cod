@@ -1,0 +1,130 @@
+# Development rules
+
+## Verify, don't recall
+
+- Before editing a file or making a claim about code, read its current state. Do not rely on what
+  you saw earlier in the conversation: files change (hooks reformat them, the user edits them).
+- Before using a library API (EF Core 9, Npgsql 9, ASP.NET Core 9, MSTest 3.9, Moq,
+  StackExchange.Redis), confirm it exists and behaves as you assume in the version referenced by the
+  `.csproj` — through existing usages in the repo, the package's XML docs or sources, or a quick
+  test. Never invent methods, options or configuration keys.
+- Do not state facts about the repo (a file exists, a method is unused, a test covers X) unless you
+  checked them in this session.
+
+## Claims need evidence
+
+- Say "done", "works", "fixed" or "passes" only together with the output of the command that shows
+  it (build, `dotnet test`, an HTTP request). Quote the relevant lines.
+- Say explicitly what was not verified (e.g. not run on a clean database, race not exercised).
+- If a command failed or was skipped, say so. Never present a failure or a partial result as success.
+
+## TDD is mandatory
+
+Every new feature and every bug fix follows red → green → refactor:
+
+1. **Test first.** Before touching the production code that implements a behaviour, write the tests
+   that describe that behaviour. Do not change production code in the same step.
+2. **See it red.** Run the new tests and confirm they fail for the right reason — on an assertion,
+   not on a compile or infrastructure error. A stub is fine to make the test compile
+   (`throw new NotImplementedException()`, an empty endpoint), but the failure must be an `Assert`.
+3. **Minimal code to green.** Only as much as the tests require.
+4. **Refactor** with tests green; run the full suite afterwards.
+5. **Bug → reproducing test first**, watch it fail, then fix.
+
+Order within a task is outside-in: first an integration test for the endpoint contract (status code,
+body, database state), then unit tests for the logic that gets extracted along the way.
+
+When reporting a task: list the added tests, what each one checks, and the red run output before
+the code and the green run after.
+
+## Tests must actually verify behaviour
+
+- Assert observable results with exact values: status code, body fields, `reason` in 409 responses,
+  database state after the request (read it through a fresh scope / `DbContext`, not the one the
+  code under test used).
+- No box-ticking tests: never assert only `200`, `IsNotNull` or "did not throw".
+- Do not mirror the implementation: a mock `Verify` must never be a test's only assertion.
+- Do not mock the code under test, do not mock EF Core / `DbContext`, do not use the InMemory
+  provider: query filters, SQL translation, transactions and locking behave differently there.
+- If it is not obvious that a test catches a regression, temporarily break the implementation and
+  confirm the test goes red.
+- Never weaken or rewrite existing tests to get green. If an existing test is in the way, stop and
+  discuss it with the user.
+- The readiness criteria in `docs/tasks.md` (a refusal leaves no trace, exact time boundaries,
+  races) are tests, not just code.
+
+## Kinds of tests
+
+| Kind | Covers | How |
+|---|---|---|
+| Integration (primary) | endpoint contract: auth, roles, status codes, ProblemDetails, body, database state, cache | `ApiHost.CreateClient()` + `AuthClient`, real Postgres and Redis |
+| Repository | new repository methods, queries, filters | real Postgres; tests that write data use `ScratchDatabase` or their own data, per the decision in task 5 |
+| Unit | pure logic: visit refunds, the two-hour rule, date parsing, queue ordering | no database; Moq only for external boundaries (clock, cache) |
+| Concurrency | invariants under parallel requests | concurrent HTTP requests via `Task.WhenAll` |
+
+Test conventions: MSTest, names `Method_Scenario_Expected` (as in `Existing/`), new tests go into
+per-feature folders, not `Existing/`. Time in tests comes from a replaceable clock — no
+`Thread.Sleep`, no dependence on the current moment.
+
+## Repository conventions
+
+Source: `ЗАДАНИЕ.md` and `docs/tasks.md`. When they disagree with this file, they win.
+
+- `ЗАДАНИЕ.md` is the source of truth for the contract; `docs/tasks.md` lists only traps and
+  non-obvious points. Nuances found while working on a task are appended to that task's text in
+  `docs/tasks.md`.
+- **No comments in code.** The single exception is `// решение: ...` — one or two lines next to code
+  that implements a decision the contract does not dictate, saying what was chosen and why. "Our code"
+  is everything added after the `init` commit, tests included (`316d590` too); the given code is not
+  ours to restyle.
+- **Given code is extended, not changed.** Add a method next to it or an extension; what worked
+  before must keep working. The given code may contain deliberate traps: fix them in the task that
+  uses that code, usually with our own method alongside.
+- Do not rename or move existing projects or files; README launch commands stay the same. New files,
+  classes and projects are allowed.
+- Seed data stays as is. If the schema changes, add a migration and make the seeder fill the new
+  columns with meaningful values.
+- Research tasks end with a decision recorded in the submission notes, not with code.
+- Style per `.editorconfig`: file-scoped namespaces, braces on a new line, `System` usings first,
+  CRLF, UTF-8.
+
+## When stuck
+
+- After two failed attempts at the same fix, stop: report what you tried, what you observed and your
+  hypotheses, and wait for the user. Do not keep trying random changes.
+- Never get to green by weakening or deleting a test, wrapping code in a catch-all `try/catch`,
+  suppressing a warning or analyzer, silencing nullability with `!` without a reason, or
+  special-casing test inputs in production code.
+
+## Running tests
+
+```
+docker compose up -d
+dotnet test
+dotnet test --filter "FullyQualifiedName~WebApi.Tests.Enrollments"
+```
+
+`TestDatabase` (`[AssemblyInitialize]`) creates a separate database on every run, so even unit tests
+need Postgres and Redis running.
+
+## Enforced by hooks
+
+`.claude/settings.json` runs the scripts in `.claude/hooks/`:
+
+- **Test-first gate** (`tdd.mjs gate`, before Edit/Write): editing a production `.cs` file is denied
+  unless some `.cs` file under a `*Tests/` directory is changed relative to `HEAD`. Do not work
+  around it: no editing production code through the shell, no dummy test edits.
+- **Existing tests** (`tdd.mjs gate`): editing a file under `*Tests/Existing/` asks the user for
+  approval — those tests pin the behaviour of the given code. Explain why the change is needed
+  before attempting it.
+- **Formatting** (`format.mjs`, after Edit/Write): an edited `.cs` file is reformatted with
+  `dotnet format whitespace` per `.editorconfig`. Re-read a file before editing it again.
+- **Green on finish** (`tdd.mjs stop`): if build inputs (`.cs`, `.csproj`, `.json`, …) changed and
+  this exact change set has not passed yet, runs `dotnet test`; a red run blocks finishing the turn.
+  Stopping in the red phase on purpose (the user asked to review tests before the implementation)
+  is allowed: say so and finish again without changing anything.
+
+## Definition of done
+
+A task is not done until: tests were written before the code and seen red, they are green now, the
+full `dotnet test` passes, and the readiness criteria in `docs/tasks.md` are met.
