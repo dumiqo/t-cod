@@ -1,5 +1,6 @@
 using Npgsql;
 using StackExchange.Redis;
+using WebApi.Tests.Infrastructure;
 
 namespace WebApi.Tests;
 
@@ -11,7 +12,7 @@ public static class TestDatabase
 
     private const string DefaultRedisConnectionString = "localhost:6380,defaultDatabase=1";
 
-    private static readonly string ServerConnectionString =
+    internal static readonly string ServerConnectionString =
         Environment.GetEnvironmentVariable("TEST_POSTGRES") ?? DefaultServerConnectionString;
 
     private static string? _databaseName;
@@ -59,6 +60,8 @@ public static class TestDatabase
     [AssemblyCleanup]
     public static async Task CleanupAsync()
     {
+        await ApiHost.DisposeAsync();
+
         if (_databaseName == null)
         {
             return;
