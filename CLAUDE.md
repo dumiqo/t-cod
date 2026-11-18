@@ -1,3 +1,46 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+Fitness club API (.NET 9, ASP.NET Core, EF Core + Npgsql, Redis). Test assignment: the given code
+has auth, data access and infrastructure; the job is the eight enrollment / schedule / analytics /
+waitlist endpoints from `ЗАДАНИЕ.md`. Only `AuthController` exists so far. Before using any given
+code, check the list of known traps in `docs/tasks.md`, task 1.
+
+## Commands
+
+```
+dotnet run --project WebApi                      # http://localhost:5080, /swagger, /health
+docker compose down -v                           # fresh DB: seed times are relative to first start
+docker compose up -d
+dotnet tool restore
+dotnet dotnet-ef migrations add <Name> --project DataAccessLayer --startup-project WebApi
+dotnet test --filter "FullyQualifiedName~AuthTests.Login_WrongPassword_Returns401"
+```
+
+Postgres is on host port 5433 and Redis on 6380 (not the defaults). Tests honour `TEST_POSTGRES` /
+`TEST_REDIS`. Seeded logins: `user001..200@club.test`, `admin001..005@club.test`, password
+`Password123!` (`DatabaseSeeder.DefaultPassword`).
+
+## Architecture
+
+- `Common` — generic infrastructure: `GenericRepository<T>`, `UnitOfWorkBase` (caches repository
+  instances per scope, `SaveChangesAsync` only — no transactions yet), `ICacheService` /
+  `RedisCacheService`.
+- `DataAccessLayer` — `ClubDbContext` (configurations applied from the assembly), entities
+  `User/Room/Class/Enrollment/Pass`, typed repositories exposed as `IUnitOfWork.Room/Class/Enrollment/Pass`,
+  `DatabaseSeeder`, migrations. `Class` has a global query filter `!IsCancelled`.
+- `WebApi` — everything is wired in `Program.cs`: on startup it migrates, seeds and connects to Redis
+  eagerly (no Redis → no start). JWT validation with `ClockSkew = Zero`. `ExceptionHandlingMiddleware`
+  turns any unhandled exception (including DB conflicts) into a 500 ProblemDetails. Controllers
+  derive from `BaseApiController` (`CurrentUserId`, `IsAdmin`).
+- `WebApi.Tests` — `TestDatabase` (`[AssemblyInitialize]`) creates `club_tests_<guid>` and flushes
+  Redis DB 1; `ApiHost` holds ONE `WebApplicationFactory` for the whole run, so all integration tests
+  share that database and seed data. Tests that mutate data in bulk use `ScratchDatabase` (its own
+  DB + `CreateContext()`). `AuthClient` logs in seeded users.
+
 # Development rules
 
 ## Verify, don't recall
