@@ -74,6 +74,14 @@ public static class EnrollApi
         var seats = events.Sum(x => long.Parse(x.GetStructuredStateValue("Seats") ?? string.Empty));
         Assert.AreEqual(seats, MetricSum(app, "club.enrollments.created"));
         Assert.AreEqual(seats, MetricSum(app, "club.visits.charged"));
+        var replays = ReplayEvents(app);
+        Assert.IsFalse(replays.Any(x => x.GetStructuredStateValue("UserId") == user.Id.ToString()));
+        Assert.AreEqual(replays.Count, MetricSum(app, "club.idempotency.replayed"));
+    }
+
+    public static IReadOnlyList<FakeLogRecord> ReplayEvents(TestApp app)
+    {
+        return app.Logs.GetSnapshot().Where(x => x.Id.Id == 1004).ToList();
     }
 
     public static IReadOnlyList<FakeLogRecord> CreatedEvents(TestApp app)

@@ -41,6 +41,12 @@ public sealed class EnrollmentService
             _metrics.VisitsCharged(seats);
         }
 
+        if (result is EnrollResult.Replayed replayed)
+        {
+            Log.IdempotentReplay(_logger, Operations.Enroll, replayed.Response.Id, classId, userId);
+            _metrics.IdempotencyReplayed(Operations.Enroll);
+        }
+
         return result;
     }
 

@@ -22,6 +22,13 @@ public static partial class Log
         long userId);
 
     [LoggerMessage(
+        EventId = 1004,
+        EventName = "IdempotentReplay",
+        Level = LogLevel.Information,
+        Message = "Idempotent replay: {Operation} result {ResultId} class {ClassId} for user {UserId}")]
+    public static partial void IdempotentReplay(ILogger logger, string operation, long resultId, long classId, long userId);
+
+    [LoggerMessage(
         EventId = 2001,
         EventName = "EnrollmentCreated",
         Level = LogLevel.Information,

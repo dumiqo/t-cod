@@ -51,6 +51,11 @@ public class EnrollKeyConcurrencyTests
                 .SingleAsync());
         Assert.AreEqual(1, CreatedEvents(app).Count);
         Assert.AreEqual(2, MetricSum(app, "club.visits.charged"));
+        var replays = ReplayEvents(app);
+        Assert.AreEqual(1, replays.Count);
+        Assert.AreEqual(enrollment.Id.ToString(), replays[0].GetStructuredStateValue("ResultId"));
+        Assert.AreEqual(1, MetricSum(app, "club.idempotency.replayed"));
+        Assert.AreEqual(0, RejectedEvents(app).Count);
 
         DisposeAll(responses);
     }
@@ -88,6 +93,10 @@ public class EnrollKeyConcurrencyTests
                 .Select(x => $"{x.ClassId}|{x.Seats}|{x.ResultId}")
                 .SingleAsync());
         await AssertNoEnrollmentsAsync(app, second);
+        Assert.AreEqual(1, CreatedEvents(app).Count);
+        Assert.AreEqual(0, ReplayEvents(app).Count);
+        Assert.AreEqual(0, MetricSum(app, "club.idempotency.replayed"));
+        AssertRejectionsCounted(app, "idempotency-key-reused", 1);
     }
 
     [TestMethod]
@@ -127,6 +136,10 @@ public class EnrollKeyConcurrencyTests
             await context.IdempotencyKeys.Where(x => x.UserId == user.Id)
                 .Select(x => $"{x.ClassId}|{x.Seats}|{x.ResultId}")
                 .SingleAsync());
+        Assert.AreEqual(1, CreatedEvents(app).Count);
+        Assert.AreEqual(0, ReplayEvents(app).Count);
+        Assert.AreEqual(0, MetricSum(app, "club.idempotency.replayed"));
+        AssertRejectionsCounted(app, "capacity-exceeded", 1);
     }
 
     [TestMethod]
