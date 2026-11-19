@@ -378,6 +378,8 @@ JSON-лога проверено на запущенном приложении 
 
 #### 7.3 Правила контракта
 
+Статус: готово (94db797)
+
 - инструменты из 7.4 (решение задачи 6): `Meter` `FitnessClub.Api` через `IMeterFactory`,
   singleton `ClubMetrics` со счётчиком `club.requests.rejected{operation, reason}`; события —
   `[LoggerMessage]` с постоянными `EventId` в `static partial class Log`
