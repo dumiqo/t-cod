@@ -734,6 +734,8 @@ JSON-лога проверено на запущенном приложении 
 
 #### 8.4 Наблюдаемость
 
+Статус: готово (134132e)
+
 - после коммита — событие и счётчики `club.enrollments.created` и `club.visits.charged`
   с точными значениями;
 - отказ `409` — событие 1001 и `club.requests.rejected` с `operation = enroll` и `reason`;
