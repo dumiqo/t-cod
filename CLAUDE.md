@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Fitness club API (.NET 9, ASP.NET Core, EF Core + Npgsql, Redis). Test assignment: the given code
 has auth, data access and infrastructure; the job is the eight enrollment / schedule / analytics /
 waitlist endpoints from `ЗАДАНИЕ.md`. Only `AuthController` exists so far. Before using any given
-code, check the list of known traps in `docs/tasks.md`, task 1.
+code, check the list of known traps in `docs/tasks/01-code-audit.md`.
 
 ## Commands
 
@@ -149,9 +149,10 @@ per-feature folders, not `Existing/`. Time in tests comes from a replaceable clo
 
 Source: `ЗАДАНИЕ.md` and `docs/tasks.md`. When they disagree with this file, they win.
 
-- `ЗАДАНИЕ.md` is the source of truth for the contract; `docs/tasks.md` lists only traps and
-  non-obvious points. Nuances found while working on a task are appended to that task's text in
-  `docs/tasks.md`.
+- `ЗАДАНИЕ.md` is the source of truth for the contract. `docs/tasks.md` is the index: rules,
+  readiness criteria, the task list with statuses. Each task's text (traps and non-obvious points
+  only) lives in `docs/tasks/NN-<name>.md`. Nuances found while working on a task are appended to
+  that task's file; a status change is made in the task's file and in the index together.
 - **No comments in code.** The single exception is `// решение: ...` — one or two lines next to code
   that implements a decision the contract does not dictate, saying what was chosen and why. "Our code"
   is everything added after the `init` commit, tests included (`316d590` too); the given code is not
