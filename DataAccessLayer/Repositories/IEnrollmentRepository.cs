@@ -10,4 +10,6 @@ public interface IEnrollmentRepository : IGenericRepository<Enrollment>
     Task<long> SumActiveSeatsAsync(long classId, CancellationToken ct = default);
 
     Task<EnrollmentCard?> GetCardAsync(long id, long userId, CancellationToken ct = default);
+
+    Task<Enrollment?> FindOwnedAsync(long id, long userId, CancellationToken ct = default);
 }

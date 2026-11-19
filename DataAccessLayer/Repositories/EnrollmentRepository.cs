@@ -26,6 +26,13 @@ public class EnrollmentRepository : GenericRepository<Enrollment>, IEnrollmentRe
             .SumAsync(x => (long)x.Seats, ct);
     }
 
+    public async Task<Enrollment?> FindOwnedAsync(long id, long userId, CancellationToken ct = default)
+    {
+        return await _dbSet
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
+    }
+
     public async Task<EnrollmentCard?> GetCardAsync(long id, long userId, CancellationToken ct = default)
     {
         var passes = _dbSet.GetService<ICurrentDbContext>().Context.Set<Pass>();

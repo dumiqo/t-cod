@@ -60,6 +60,51 @@ public class ConstraintsTests
     }
 
     [TestMethod]
+    [DataRow("cancelled", null, "ck_enrollments_refunded_visits_status")]
+    [DataRow("active", 0, "ck_enrollments_refunded_visits_status")]
+    [DataRow("active", 2, "ck_enrollments_refunded_visits_status")]
+    [DataRow("cancelled", -1, "ck_enrollments_refunded_visits")]
+    public async Task SaveChanges_RefundedVisitsNotMatchingStatus_ViolatesCheckConstraint(string status, int? refundedVisits, string constraint)
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var enrollment = await context.Enrollments.Where(x => x.Status == "active").OrderBy(x => x.Id).FirstAsync();
+
+        enrollment.Status = status;
+        enrollment.CancelledAt = status == "cancelled" ? enrollment.CreatedAt : null;
+        enrollment.RefundedVisits = refundedVisits;
+
+        var exception = await Assert.ThrowsExceptionAsync<DbUpdateException>(() => context.SaveChangesAsync());
+        var postgres = (PostgresException)exception.InnerException!;
+
+        Assert.AreEqual(PostgresErrorCodes.CheckViolation, postgres.SqlState);
+        Assert.AreEqual(constraint, postgres.ConstraintName);
+    }
+
+    [TestMethod]
+    [DataRow(0)]
+    [DataRow(1)]
+    public async Task SaveChanges_CancelledWithRefundedVisits_Saves(int refundedVisits)
+    {
+        await using var db = await TestDb.CloneAsync();
+        long id;
+
+        await using (var context = db.CreateContext())
+        {
+            var enrollment = await context.Enrollments.Where(x => x.Status == "active").OrderBy(x => x.Id).FirstAsync();
+            id = enrollment.Id;
+            enrollment.Status = "cancelled";
+            enrollment.CancelledAt = enrollment.CreatedAt;
+            enrollment.RefundedVisits = refundedVisits;
+            await context.SaveChangesAsync();
+        }
+
+        await using var check = db.CreateContext();
+
+        Assert.AreEqual(refundedVisits, await check.Enrollments.Where(x => x.Id == id).Select(x => x.RefundedVisits).SingleAsync());
+    }
+
+    [TestMethod]
     public async Task SaveChanges_SecondPassForUser_ViolatesUniqueIndex()
     {
         await using var db = await TestDb.CloneAsync();

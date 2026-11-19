@@ -165,6 +165,64 @@ public class EnrollmentRepositoryTests
         Assert.AreEqual(1, counter.Count);
     }
 
+    [TestMethod]
+    [DataRow("active", false)]
+    [DataRow("cancelled", false)]
+    [DataRow("active", true)]
+    [DataRow("cancelled", true)]
+    public async Task FindOwnedAsync_OwnEnrollment_ReturnsUntrackedEnrollment(string status, bool classCancelled)
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var classId = await AddClassAsync(context, cancelled: classCancelled);
+        var userId = await context.Users.OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();
+        var id = await AddOwnEnrollmentAsync(context, userId, classId, 3, status);
+
+        var enrollment = await new UnitOfWork(context).Enrollment.FindOwnedAsync(id, userId);
+
+        Assert.IsNotNull(enrollment);
+        var createdAt = new DateTime(2029, 12, 1, 10, 0, 0, DateTimeKind.Utc).AddTicks(1234560);
+        Assert.AreEqual(id, enrollment.Id);
+        Assert.AreEqual(userId, enrollment.UserId);
+        Assert.AreEqual(classId, enrollment.ClassId);
+        Assert.AreEqual(3, enrollment.Seats);
+        Assert.AreEqual(status, enrollment.Status);
+        Assert.AreEqual(createdAt, enrollment.CreatedAt);
+        Assert.AreEqual(status == "cancelled" ? createdAt : null, enrollment.CancelledAt);
+        Assert.AreEqual(status == "cancelled" ? 3 : null, enrollment.RefundedVisits);
+        Assert.IsNull(enrollment.Class);
+        Assert.AreEqual(0, context.ChangeTracker.Entries().Count());
+    }
+
+    [TestMethod]
+    public async Task FindOwnedAsync_OtherUsersEnrollment_ReturnsNull()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var classId = await AddClassAsync(context);
+        var users = await context.Users.OrderBy(x => x.Id).Select(x => x.Id).Take(2).ToListAsync();
+        var id = await AddOwnEnrollmentAsync(context, users[0], classId, 1, "active");
+
+        var enrollment = await new UnitOfWork(context).Enrollment.FindOwnedAsync(id, users[1]);
+
+        Assert.IsNull(enrollment);
+    }
+
+    [TestMethod]
+    [DataRow(999999999L)]
+    [DataRow(0L)]
+    [DataRow(-1L)]
+    public async Task FindOwnedAsync_UnknownId_ReturnsNull(long id)
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var userId = await context.Users.OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();
+
+        var enrollment = await new UnitOfWork(context).Enrollment.FindOwnedAsync(id, userId);
+
+        Assert.IsNull(enrollment);
+    }
+
     private static async Task<long> AddOwnEnrollmentAsync(ClubDbContext context, long userId, long classId, int seats, string status)
     {
         var createdAt = new DateTime(2029, 12, 1, 10, 0, 0, DateTimeKind.Utc).AddTicks(1234560);
@@ -175,7 +233,8 @@ public class EnrollmentRepositoryTests
             Seats = seats,
             Status = status,
             CreatedAt = createdAt,
-            CancelledAt = status == "cancelled" ? createdAt : null
+            CancelledAt = status == "cancelled" ? createdAt : null,
+            RefundedVisits = status == "cancelled" ? seats : null
         };
         context.Enrollments.Add(enrollment);
         await context.SaveChangesAsync();
@@ -214,7 +273,8 @@ public class EnrollmentRepositoryTests
             Seats = seats,
             Status = status,
             CreatedAt = createdAt,
-            CancelledAt = status == "cancelled" ? createdAt : null
+            CancelledAt = status == "cancelled" ? createdAt : null,
+            RefundedVisits = status == "cancelled" ? seats : null
         });
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();

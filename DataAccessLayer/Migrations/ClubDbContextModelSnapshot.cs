@@ -84,6 +84,10 @@ namespace DataAccessLayer.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<int?>("RefundedVisits")
+                        .HasColumnType("integer")
+                        .HasColumnName("refunded_visits");
+
                     b.Property<int>("Seats")
                         .HasColumnType("integer")
                         .HasColumnName("seats");
@@ -105,6 +109,10 @@ namespace DataAccessLayer.Migrations
 
                     b.ToTable("enrollments", null, t =>
                         {
+                            t.HasCheckConstraint("ck_enrollments_refunded_visits", "refunded_visits >= 0");
+
+                            t.HasCheckConstraint("ck_enrollments_refunded_visits_status", "(status = 'active') = (refunded_visits IS NULL)");
+
                             t.HasCheckConstraint("ck_enrollments_seats", "seats >= 1");
                         });
                 });

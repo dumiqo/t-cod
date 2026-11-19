@@ -241,7 +241,8 @@ public class EnrollReplayTests
             await context.Enrollments.Where(x => x.UserId == user.Id)
                 .ExecuteUpdateAsync(x => x
                     .SetProperty(e => e.Status, "cancelled")
-                    .SetProperty(e => e.CancelledAt, cancelledAt));
+                    .SetProperty(e => e.CancelledAt, cancelledAt)
+                    .SetProperty(e => e.RefundedVisits, 3));
         }
 
         var enrollmentsBefore = await UserEnrollmentsAsync(app, user);

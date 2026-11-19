@@ -56,6 +56,61 @@ public sealed class EnrollmentService
         return _unitOfWork.Enrollment.GetCardAsync(id, userId, ct);
     }
 
+    public async Task<CancelResult> CancelAsync(long userId, long id, CancellationToken ct)
+    {
+        var found = await _unitOfWork.Enrollment.FindOwnedAsync(id, userId, ct);
+
+        if (found is null)
+        {
+            return new CancelResult.NotFound();
+        }
+
+        // решение: отменённая бронь отдаётся без замков и транзакции: cancelled — конечный статус,
+        // а refunded_visits пишется в той же транзакции, что и статус.
+        if (found.Status == EnrollmentStatuses.Cancelled)
+        {
+            return Repeat(found);
+        }
+
+        return await _transactions.RunAsync<CancelResult>(Operations.CancelEnrollment, async token =>
+        {
+            _ = await _unitOfWork.Class.LockIncludingCancelledAsync(found.ClassId, token)
+                ?? throw new InvalidOperationException($"Class {found.ClassId} of enrollment {id} not found.");
+
+            var enrollment = await _unitOfWork.Enrollment.GetByIdAsync(id, token)
+                ?? throw new InvalidOperationException($"Enrollment {id} disappeared.");
+
+            if (enrollment.Status == EnrollmentStatuses.Cancelled)
+            {
+                return TransactionResult.Rollback(Repeat(enrollment));
+            }
+
+            var pass = await _unitOfWork.Pass.LockByUserAsync(userId, token)
+                ?? throw new InvalidOperationException($"User {userId} has no pass.");
+
+            var now = _clock.GetUtcNow().UtcDateTime;
+            var refundedVisits = enrollment.Seats;
+
+            enrollment.Status = EnrollmentStatuses.Cancelled;
+            enrollment.CancelledAt = now.TruncateToMicroseconds();
+            enrollment.RefundedVisits = refundedVisits;
+            pass.RemainingVisits += refundedVisits;
+
+            await _unitOfWork.SaveChangesAsync(token);
+
+            return TransactionResult.Commit<CancelResult>(
+                new CancelResult.Cancelled(enrollment.Id, refundedVisits, pass.RemainingVisits, false));
+        }, ct);
+    }
+
+    private static CancelResult Repeat(Enrollment enrollment)
+    {
+        var refundedVisits = enrollment.RefundedVisits
+            ?? throw new InvalidOperationException($"Enrollment {enrollment.Id} is cancelled without refunded visits.");
+
+        return new CancelResult.Cancelled(enrollment.Id, refundedVisits, null, true);
+    }
+
     private Task<EnrollResult> EnrollInTransactionAsync(long userId, long classId, int seats, byte[] keyHash, CancellationToken ct)
     {
         return _transactions.RunAsync<EnrollResult>(Operations.Enroll, async token =>

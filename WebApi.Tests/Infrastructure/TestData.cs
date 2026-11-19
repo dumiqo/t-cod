@@ -63,7 +63,7 @@ public sealed class TestData
         return item.Id;
     }
 
-    public async Task<long> EnrollmentAsync(long userId, long classId, int seats, bool cancelled = false)
+    public async Task<long> EnrollmentAsync(long userId, long classId, int seats, bool cancelled = false, int? refundedVisits = null)
     {
         var now = _app.Clock.GetUtcNow().UtcDateTime;
         var enrollment = new Enrollment
@@ -73,7 +73,8 @@ public sealed class TestData
             Seats = seats,
             Status = cancelled ? "cancelled" : EnrollmentStatuses.Active,
             CreatedAt = now,
-            CancelledAt = cancelled ? now : null
+            CancelledAt = cancelled ? now : null,
+            RefundedVisits = cancelled ? refundedVisits ?? seats : null
         };
 
         await using var context = _app.CreateContext();

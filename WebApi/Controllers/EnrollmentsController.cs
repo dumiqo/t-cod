@@ -45,4 +45,18 @@ public class EnrollmentsController : ClubApiController
 
         return card is null ? NotFound() : Ok(EnrollmentCardResponse.From(card));
     }
+
+    [HttpPost("{id}/cancel")]
+    public async Task<IActionResult> Cancel(long id, CancellationToken ct)
+    {
+        var result = await _enrollments.CancelAsync(CurrentUserId, id, ct);
+
+        return result switch
+        {
+            CancelResult.Cancelled cancelled => Ok(CancelEnrollmentResponse.From(cancelled)),
+            CancelResult.NotFound => NotFound(),
+            CancelResult.Rejected rejected => Reject(Operations.CancelEnrollment, rejected.Reason),
+            _ => throw new InvalidOperationException($"Unknown cancel result {result}.")
+        };
+    }
 }

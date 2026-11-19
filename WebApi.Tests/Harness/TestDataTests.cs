@@ -123,7 +123,38 @@ public class TestDataTests
         Assert.AreEqual("active", stored.Status);
         Assert.AreEqual(now, stored.CreatedAt);
         Assert.IsNull(stored.CancelledAt);
+        Assert.IsNull(stored.RefundedVisits);
         Assert.AreEqual(4, await context.Passes.Where(x => x.UserId == user.Id).Select(x => x.RemainingVisits).SingleAsync());
+    }
+
+    [TestMethod]
+    public async Task EnrollmentAsync_ActiveWithRefundedVisits_StoresNull()
+    {
+        await using var app = await TestApp.StartAsync();
+        var user = await app.Data.UserAsync();
+        var classId = await app.Data.ClassAsync();
+
+        var id = await app.Data.EnrollmentAsync(user.Id, classId, 2, refundedVisits: 2);
+
+        await using var context = app.CreateContext();
+        var stored = await context.Enrollments.SingleAsync(x => x.Id == id);
+        Assert.AreEqual("active", stored.Status);
+        Assert.IsNull(stored.RefundedVisits);
+    }
+
+    [TestMethod]
+    public async Task EnrollmentAsync_CancelledWithRefundedVisits_StoresGivenValue()
+    {
+        await using var app = await TestApp.StartAsync();
+        var user = await app.Data.UserAsync();
+        var classId = await app.Data.ClassAsync();
+
+        var id = await app.Data.EnrollmentAsync(user.Id, classId, 3, cancelled: true, refundedVisits: 0);
+
+        await using var context = app.CreateContext();
+        var stored = await context.Enrollments.SingleAsync(x => x.Id == id);
+        Assert.AreEqual("cancelled", stored.Status);
+        Assert.AreEqual(0, stored.RefundedVisits);
     }
 
     [TestMethod]
@@ -142,5 +173,6 @@ public class TestDataTests
         Assert.AreEqual(int.MaxValue, stored.Seats);
         Assert.AreEqual("cancelled", stored.Status);
         Assert.AreEqual(now, stored.CancelledAt);
+        Assert.AreEqual(int.MaxValue, stored.RefundedVisits);
     }
 }

@@ -169,7 +169,10 @@ public static class DatabaseSeeder
                 CreatedAt = createdAt,
                 CancelledAt = cancelled
                     ? CancelledBetween(createdAt, scheduledClass.StartsAt, random)
-                    : null
+                    : null,
+                // решение: за отменённые брони посещения не списывались — это то же, что полный возврат
+                // (§3, отмена больше чем за 2 часа); cancelled_at не смотрим, как и миграция.
+                RefundedVisits = cancelled ? seats : null
             });
         }
 
