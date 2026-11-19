@@ -51,6 +51,20 @@ public sealed class HeldLock : IAsyncDisposable
         }
     }
 
+    public async Task<long> WaitForBlockedCountAsync(int expected, TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(10));
+        var count = await CountBlockedAsync();
+
+        while (count < expected && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+            count = await CountBlockedAsync();
+        }
+
+        return count;
+    }
+
     public async ValueTask DisposeAsync()
     {
         await _transaction.DisposeAsync();

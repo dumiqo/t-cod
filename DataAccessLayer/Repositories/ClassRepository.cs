@@ -18,10 +18,11 @@ public class ClassRepository : GenericRepository<Class>, IClassRepository
             .FirstOrDefaultAsync(x => x.Id == id, ct);
     }
 
-    public async Task<Class?> FindIncludingCancelledAsync(long id, CancellationToken ct = default)
+    public async Task<Class?> LockIncludingCancelledAsync(long id, CancellationToken ct = default)
     {
         return await _dbSet
+            .FromSql($"SELECT * FROM classes WHERE id = {id} FOR NO KEY UPDATE")
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(x => x.Id == id, ct);
+            .SingleOrDefaultAsync(ct);
     }
 }

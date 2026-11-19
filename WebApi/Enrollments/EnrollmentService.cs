@@ -22,7 +22,7 @@ public sealed class EnrollmentService
     {
         return _transactions.RunAsync<EnrollResult>(Operations.Enroll, async token =>
         {
-            var item = await _unitOfWork.Class.FindIncludingCancelledAsync(classId, token);
+            var item = await _unitOfWork.Class.LockIncludingCancelledAsync(classId, token);
 
             if (item is null)
             {
@@ -34,9 +34,11 @@ public sealed class EnrollmentService
                 return TransactionResult.Rollback<EnrollResult>(new EnrollResult.Rejected(RejectReasons.ClassCancelled));
             }
 
-            var pass = await _unitOfWork.Pass.GetByUserAsync(userId, token)
+            var pass = await _unitOfWork.Pass.LockByUserAsync(userId, token)
                 ?? throw new InvalidOperationException($"User {userId} has no pass.");
 
+            // решение: часы читаются после последнего замка: ожидание на замке до lock_timeout
+            // пропустило бы начало занятия или конец срока абонемента.
             var now = _clock.GetUtcNow().UtcDateTime;
             var reason = await CheckAsync(item, pass, seats, now, token);
 
