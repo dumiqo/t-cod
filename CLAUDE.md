@@ -118,6 +118,19 @@ the code and the green run after.
   discuss it with the user.
 - The readiness criteria in `docs/tasks.md` (a refusal leaves no trace, exact time boundaries,
   races) are tests, not just code.
+- Every behaviour gets three groups of tests, not just the happy path. Before calling the tests
+  for a task complete, go through each group and add what is missing:
+  - **positive**: the valid request with exact response and state;
+  - **negative**: every error row of the contract table (each `400` cause, `401`, `403`, `404`,
+    each `409` `reason`), malformed input (unparsable JSON, missing / `null` / wrong-type fields,
+    non-numeric ids), and that a refusal leaves no trace (DB state, no success event or metric);
+  - **corner**: both sides of every boundary (equal / one tick before / one tick after, `0`, `1`,
+    max, overflow), empty and duplicate values, time zones and offsets, leap days, concurrent
+    requests, rollback after a partial write.
+
+  Each case asserts the exact status, body and side effects; the task report lists the tests by
+  group. A behaviour whose result is not yet decided is not pinned by a test: raise it with the
+  user instead.
 
 ## Kinds of tests
 
