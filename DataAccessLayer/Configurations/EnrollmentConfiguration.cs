@@ -8,7 +8,7 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
 {
     public void Configure(EntityTypeBuilder<Enrollment> builder)
     {
-        builder.ToTable("enrollments");
+        builder.ToTable("enrollments", x => x.HasCheckConstraint("ck_enrollments_seats", "seats >= 1"));
 
         builder.HasKey(x => x.Id);
 

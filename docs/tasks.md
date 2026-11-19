@@ -501,6 +501,48 @@ JSON-лога проверено на запущенном приложении 
   на `passes.user_id` вместо обычного. Сиды и тесты в `Existing` им не противоречат.
   Нарушение — ошибка нашего кода, `500`.
 
+Решено при разборе (вопросы и ответы до кода):
+
+- исполнитель — `DataAccessLayer/Transactions/TransactionRunner`, без интерфейса, зависит
+  от `IUnitOfWork` и работает через `uow.DbContext`: контекст общий по построению;
+- `RunAsync(operation, ct => Task<TransactionResult<T>>, ct)`: делегат возвращает
+  `TransactionResult.Commit(value)` или `Rollback(value)`. Явный откат нужен для отказа `409`:
+  ключ идемпотентности пишется до проверки абонементов, и отказ после него коммитить нельзя;
+- 55P03/40P01 распознаёт исполнитель: откатывает и бросает
+  `TransactionConflictException(operation, reason)`, `reason` — `lock-timeout` / `deadlock`.
+  Фильтр ловит только этот тип, так он знает `operation` для счётчика;
+- `Transactions:LockTimeout` — от 1 мс включительно: Postgres считает `lock_timeout` в целых мс,
+  и `0` — «без предела». Значение ставит `set_config('lock_timeout', @ms, true)` — то же, что
+  `SET LOCAL`, но с параметром;
+- тело `503` — как у `409`: `type`, `title`, `status`, `traceId`, `reason`; событие 1002
+  `TransactionConflict` (Warning, `Operation`, `Reason`, `UserId`, с исключением);
+- ограничения описаны в выданных `PassConfiguration` и `EnrollmentConfiguration` (добавлены,
+  прежнее не менялось), миграция `AddIntegrityConstraints` сгенерирована, а не написана
+  руками: иначе снимок модели разошёлся бы с базой.
+
+Найдено при реализации:
+
+- в `ClientErrorMapping` ASP.NET 9 запись для 503 есть: `title` «Service Unavailable»,
+  `type` — rfc9110 §15.6.4;
+- глобальный фильтр исключений MVC срабатывает раньше `ExceptionHandlingMiddleware`: на `503`
+  записи middleware в логе нет;
+- без `lock_timeout` ожидание замка обрывает `CommandTimeout` Npgsql через 30 секунд:
+  `InvalidOperationException` → `500` (заглушка исполнителя в red-фазе, 31 с на тест);
+- `ValidateOnStart` у `WebApplicationFactory` бросает `OptionsValidationException` без обёртки;
+- `SET LOCAL` действует только в транзакции: после неё на том же соединении `lock_timeout` — `0`
+  (закреплено тестом);
+- взаимоблокировка в тесте: жертва — сессия, которая ждёт дольше, у неё раньше истекает
+  `deadlock_timeout`. Эндпоинт встаёт в ожидание первым (тест ждёт этого по `pg_blocking_pids`),
+  поэтому `40P01` получает он, а соединение теста получает замок. Хелпер — `HeldLock`;
+- после `Rollback` сущности остаются в `ChangeTracker` изменёнными: `SaveChanges` в том же scope
+  после отката записал бы их вне транзакции. Вызывающий после `Rollback` ничего не сохраняет;
+- тест обёртки `23505` — в `ConstraintsTests` (тот же точный тип `DbUpdateException`).
+  Что тесты обёрток ловят регрессию, проверено временной заменой ожидаемого типа: оба красные
+  с «Actual exception type: InvalidOperationException»;
+- запуск по `README` на чистой базе: миграции `Initial` и `AddIntegrityConstraints` применены,
+  в базе `ck_passes_remaining_visits`, `ck_enrollments_seats` и уникальный `IX_passes_user_id`;
+  `/health` и `/health/ready` — `200 Healthy`.
+
 ### 8. Запись на занятие (§1)
 
 - пять причин отказа;

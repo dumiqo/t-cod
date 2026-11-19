@@ -103,7 +103,10 @@ namespace DataAccessLayer.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("enrollments", (string)null);
+                    b.ToTable("enrollments", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_enrollments_seats", "seats >= 1");
+                        });
                 });
 
             modelBuilder.Entity("DataAccessLayer.Entities.Pass", b =>
@@ -129,9 +132,13 @@ namespace DataAccessLayer.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .IsUnique();
 
-                    b.ToTable("passes", (string)null);
+                    b.ToTable("passes", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_passes_remaining_visits", "remaining_visits >= 0");
+                        });
                 });
 
             modelBuilder.Entity("DataAccessLayer.Entities.Room", b =>

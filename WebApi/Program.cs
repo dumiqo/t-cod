@@ -4,6 +4,7 @@ using Common.Caching;
 using DataAccessLayer;
 using DataAccessLayer.Entities;
 using DataAccessLayer.Seeding;
+using DataAccessLayer.Transactions;
 using DataAccessLayer.UnitOfWork;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -12,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
 using WebApi.Auth;
+using WebApi.Filters;
 using WebApi.Middleware;
 using WebApi.Observability;
 
@@ -24,7 +26,7 @@ builder.Host.UseDefaultServiceProvider(options =>
 });
 
 // решение: число в кавычках — 400: веб-настройки System.Text.Json читают числа из строк, а в контракте поля числовые.
-builder.Services.AddControllers()
+builder.Services.AddControllers(options => options.Filters.Add<TransactionConflictFilter>())
     .AddJsonOptions(options => options.JsonSerializerOptions.NumberHandling = JsonNumberHandling.Strict);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -36,6 +38,15 @@ builder.Services.AddDbContext<ClubDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<TransactionRunner>();
+// решение: lock_timeout — от 1 мс (Postgres считает в целых мс, 0 — без предела) и меньше 30 с
+// (CommandTimeout Npgsql прервал бы ожидание раньше, и вместо 503 был бы 500).
+builder.Services.AddOptions<TransactionSettings>()
+    .BindConfiguration(TransactionSettings.Section)
+    .Validate(
+        x => x.LockTimeout >= TimeSpan.FromMilliseconds(1) && x.LockTimeout < TimeSpan.FromSeconds(30),
+        "Transactions:LockTimeout must be at least 1 ms and less than 30 s.")
+    .ValidateOnStart();
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));

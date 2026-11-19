@@ -31,14 +31,21 @@ Postgres is on host port 5433 and Redis on 6380 (not the defaults). Tests honour
   `RedisCacheService`.
 - `DataAccessLayer` — `ClubDbContext` (configurations applied from the assembly), entities
   `User/Room/Class/Enrollment/Pass`, typed repositories exposed as `IUnitOfWork.Room/Class/Enrollment/Pass`,
-  `DatabaseSeeder`, migrations. `Class` has a global query filter `!IsCancelled`.
+  `DatabaseSeeder`, migrations. `Class` has a global query filter `!IsCancelled`. Schema guards:
+  `CHECK remaining_visits >= 0`, `CHECK seats >= 1`, unique `passes.user_id` (violation → 500).
+  Writes go through `Transactions/TransactionRunner.RunAsync(operation, ct => …Commit(v)|Rollback(v), ct)`:
+  Read Committed + `lock_timeout` from `Transactions:LockTimeout` (1 ms ≤ x < 30 s, default 10 s);
+  55P03/40P01 → `TransactionConflictException(operation, "lock-timeout"|"deadlock")`. After
+  `Rollback` do not `SaveChanges` in the same scope — tracked changes are still there.
 - `WebApi` — `/health` (liveness, runs no checks) and `/health/ready` (Postgres and Redis checks
   in `Observability/`, JSON console logs). Everything is wired in `Program.cs`: on startup it migrates, seeds and connects to Redis
   eagerly (no Redis → no start). JWT validation with `ClockSkew = Zero`. `ExceptionHandlingMiddleware`
   turns any unhandled exception (including DB conflicts) into a 500 ProblemDetails. Controllers
   derive from `BaseApiController` (`CurrentUserId`, `IsAdmin`); our endpoints derive from
   `ClubApiController` (`[Authorize]`, `Reject(operation, reason)` → 409 with `reason`, event 1001 and
-  `club.requests.rejected`). Instruments: `Observability/ClubMetrics`, `Observability/Log`.
+  `club.requests.rejected`). `Filters/TransactionConflictFilter` (global MVC filter) turns
+  `TransactionConflictException` into 503 + `Retry-After: 1` with `reason`, event 1002 and
+  `club.requests.rejected`. Instruments: `Observability/ClubMetrics`, `Observability/Log`.
   Query time/date params bind with `[ModelBinder(typeof(UtcDateTimeModelBinder|IsoDateModelBinder))]`
   (`Binding/`); required body: `[FromBody, Required] T? request`; JSON numbers are strict.
 - `WebApi.Tests` — test isolation per the decision of task 5 (`NOTES.md`, «Изоляция тестов»). Tests run
@@ -52,6 +59,8 @@ Postgres is on host port 5433 and Redis on 6380 (not the defaults). Tests honour
     Controllers from the test assembly are mounted (`HarnessController`, `GET /harness/me`).
   - `TestDb.CloneAsync()` — just a clone, for repository tests. The template is built lazily once per
     run and dropped in `TestDatabase.CleanupAsync`; a clone is dropped on dispose.
+  - `HeldLock.AcquireAsync(connectionString, sql)` — a test's own connection holding row locks;
+    `WaitForBlockedAsync(n)` waits until n sessions queue behind it (`pg_blocking_pids` chain).
   - Given code, kept for `Existing/`: `TestDatabase` (`club_tests_<guid>`, flushes Redis DB 1),
     `ApiHost` (ONE shared factory, server started under its lock), `ScratchDatabase`, `AuthClient`.
 
