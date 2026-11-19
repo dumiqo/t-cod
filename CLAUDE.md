@@ -36,10 +36,17 @@ Postgres is on host port 5433 and Redis on 6380 (not the defaults). Tests honour
   eagerly (no Redis → no start). JWT validation with `ClockSkew = Zero`. `ExceptionHandlingMiddleware`
   turns any unhandled exception (including DB conflicts) into a 500 ProblemDetails. Controllers
   derive from `BaseApiController` (`CurrentUserId`, `IsAdmin`).
-- `WebApi.Tests` — `TestDatabase` (`[AssemblyInitialize]`) creates `club_tests_<guid>` and flushes
-  Redis DB 1; `ApiHost` holds ONE `WebApplicationFactory` for the whole run, so all integration tests
-  share that database and seed data. Tests that mutate data in bulk use `ScratchDatabase` (its own
-  DB + `CreateContext()`). `AuthClient` logs in seeded users.
+- `WebApi.Tests` — test isolation per the decision of task 5 (`NOTES.md`, «Изоляция тестов»). Tests run
+  in parallel (`Parallelization.cs`, 8 workers); race tests are `[DoNotParallelize]`.
+  - `TestApp.StartAsync()` — one per HTTP test (`await using`): its own clone of a seeded template DB,
+    its own `WebApplicationFactory`, a stopped `FakeTimeProvider` at the seed moment (`app.Clock`,
+    `app.SeededAt`), its own Redis key prefix (`app.Redis` sees keys as the app does),
+    `app.CreateContext()` to check the DB, `app.CreateClientAsync(email)` for a logged-in client.
+    Controllers from the test assembly are mounted (`HarnessController`, `GET /harness/me`).
+  - `TestDb.CloneAsync()` — just a clone, for repository tests. The template is built lazily once per
+    run and dropped in `TestDatabase.CleanupAsync`; a clone is dropped on dispose.
+  - Given code, kept for `Existing/`: `TestDatabase` (`club_tests_<guid>`, flushes Redis DB 1),
+    `ApiHost` (ONE shared factory, server started under its lock), `ScratchDatabase`, `AuthClient`.
 
 # Development rules
 
@@ -100,8 +107,8 @@ the code and the green run after.
 
 | Kind | Covers | How |
 |---|---|---|
-| Integration (primary) | endpoint contract: auth, roles, status codes, ProblemDetails, body, database state, cache | `ApiHost.CreateClient()` + `AuthClient`, real Postgres and Redis |
-| Repository | new repository methods, queries, filters | real Postgres; tests that write data use `ScratchDatabase` or their own data, per the decision in task 5 |
+| Integration (primary) | endpoint contract: auth, roles, status codes, ProblemDetails, body, database state, cache | `await using var app = await TestApp.StartAsync()`, real Postgres and Redis; the test creates the data it checks |
+| Repository | new repository methods, queries, filters | `await using var db = await TestDb.CloneAsync()`, real Postgres |
 | Unit | pure logic: visit refunds, the two-hour rule, date parsing, queue ordering | no database; Moq only for external boundaries (clock, cache) |
 | Concurrency | invariants under parallel requests | concurrent HTTP requests via `Task.WhenAll` |
 
@@ -148,7 +155,9 @@ dotnet test --filter "FullyQualifiedName~WebApi.Tests.Enrollments"
 ```
 
 `TestDatabase` (`[AssemblyInitialize]`) creates a separate database on every run, so even unit tests
-need Postgres and Redis running.
+need Postgres and Redis running. Servers come from `TEST_POSTGRES` / `TEST_REDIS`, otherwise from
+`docker compose`; the Postgres role needs `CREATEDB`. Tests run in parallel: never share mutable
+state between tests, move time with `app.Clock`, not by waiting.
 
 ## Enforced by hooks
 

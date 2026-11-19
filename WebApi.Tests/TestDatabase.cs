@@ -61,6 +61,7 @@ public static class TestDatabase
     public static async Task CleanupAsync()
     {
         await ApiHost.DisposeAsync();
+        await TestDb.DropTemplateAsync();
 
         if (_databaseName == null)
         {
