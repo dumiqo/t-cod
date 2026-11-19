@@ -21,11 +21,17 @@ public class EnrollmentsController : ClubApiController
         [FromBody, Required] EnrollRequest? request,
         CancellationToken ct)
     {
-        var result = await _enrollments.EnrollAsync(CurrentUserId, request!.ClassId!.Value, request.Seats!.Value, ct);
+        var result = await _enrollments.EnrollAsync(
+            CurrentUserId,
+            request!.ClassId!.Value,
+            request.Seats!.Value,
+            idempotencyKey!,
+            ct);
 
         return result switch
         {
             EnrollResult.Created created => StatusCode(StatusCodes.Status201Created, EnrollmentResponse.From(created.Enrollment)),
+            EnrollResult.Replayed replayed => StatusCode(StatusCodes.Status201Created, replayed.Response),
             EnrollResult.ClassNotFound => NotFound(),
             EnrollResult.Rejected rejected => Reject(Operations.Enroll, rejected.Reason),
             _ => throw new InvalidOperationException($"Unknown enroll result {result}.")

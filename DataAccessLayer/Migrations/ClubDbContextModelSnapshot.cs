@@ -109,6 +109,58 @@ namespace DataAccessLayer.Migrations
                         });
                 });
 
+            modelBuilder.Entity("DataAccessLayer.Entities.IdempotencyKey", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ClassId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("class_id");
+
+                    b.Property<byte[]>("KeyHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("key_hash");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("operation");
+
+                    b.Property<DateTime?>("ResultCreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("result_created_at");
+
+                    b.Property<long?>("ResultId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("result_id");
+
+                    b.Property<int>("Seats")
+                        .HasColumnType("integer")
+                        .HasColumnName("seats");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Operation", "KeyHash")
+                        .IsUnique();
+
+                    b.ToTable("idempotency_keys", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_idempotency_keys_key_hash", "octet_length(key_hash) = 32");
+
+                            t.HasCheckConstraint("ck_idempotency_keys_operation", "operation IN ('enroll')");
+                        });
+                });
+
             modelBuilder.Entity("DataAccessLayer.Entities.Pass", b =>
                 {
                     b.Property<long>("Id")
@@ -219,6 +271,15 @@ namespace DataAccessLayer.Migrations
                         .IsRequired();
 
                     b.Navigation("Class");
+                });
+
+            modelBuilder.Entity("DataAccessLayer.Entities.IdempotencyKey", b =>
+                {
+                    b.HasOne("DataAccessLayer.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("DataAccessLayer.Entities.Pass", b =>

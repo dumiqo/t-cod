@@ -13,4 +13,14 @@ public sealed record EnrollmentResponse(long Id, long ClassId, int Seats, string
             enrollment.Status,
             enrollment.CreatedAt);
     }
+
+    public static EnrollmentResponse Replay(IdempotencyKey key)
+    {
+        if (key.ResultId is not { } id || key.ResultCreatedAt is not { } createdAt)
+        {
+            throw new InvalidOperationException($"Idempotency key {key.Id} is committed without a result.");
+        }
+
+        return new EnrollmentResponse(id, key.ClassId, key.Seats, EnrollmentStatuses.Active, createdAt);
+    }
 }

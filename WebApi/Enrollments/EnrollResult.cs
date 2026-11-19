@@ -6,6 +6,8 @@ public abstract record EnrollResult
 {
     public sealed record Created(Enrollment Enrollment, int RemainingVisits) : EnrollResult;
 
+    public sealed record Replayed(EnrollmentResponse Response) : EnrollResult;
+
     public sealed record ClassNotFound : EnrollResult;
 
     public sealed record Rejected(string Reason) : EnrollResult;

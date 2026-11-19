@@ -13,7 +13,12 @@ public static class EnrollApi
 {
     public const string TraceParent = "^00-[0-9a-f]{32}-[0-9a-f]{16}-00$";
 
-    public static Task<HttpResponseMessage> PostAsync(HttpClient client, string json, string? key = "key")
+    public static Task<HttpResponseMessage> PostAsync(HttpClient client, string json)
+    {
+        return PostAsync(client, json, Guid.NewGuid().ToString());
+    }
+
+    public static Task<HttpResponseMessage> PostAsync(HttpClient client, string json, string? key)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/enrollments")
         {
@@ -62,6 +67,7 @@ public static class EnrollApi
         await using var context = app.CreateContext();
 
         Assert.IsFalse(await context.Enrollments.AnyAsync(x => x.UserId == user.Id));
+        Assert.IsFalse(await context.IdempotencyKeys.AnyAsync(x => x.UserId == user.Id));
         Assert.AreEqual(remainingVisits, await RemainingVisitsAsync(app, user));
         var events = CreatedEvents(app);
         Assert.IsFalse(events.Any(x => x.GetStructuredStateValue("UserId") == user.Id.ToString()));

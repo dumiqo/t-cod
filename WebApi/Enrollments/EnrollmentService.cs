@@ -1,6 +1,7 @@
 using DataAccessLayer.Entities;
 using DataAccessLayer.Transactions;
 using DataAccessLayer.UnitOfWork;
+using WebApi.Idempotency;
 using WebApi.Observability;
 using WebApi.Time;
 
@@ -28,9 +29,9 @@ public sealed class EnrollmentService
         _metrics = metrics;
     }
 
-    public async Task<EnrollResult> EnrollAsync(long userId, long classId, int seats, CancellationToken ct)
+    public async Task<EnrollResult> EnrollAsync(long userId, long classId, int seats, string idempotencyKey, CancellationToken ct)
     {
-        var result = await EnrollInTransactionAsync(userId, classId, seats, ct);
+        var result = await EnrollInTransactionAsync(userId, classId, seats, IdempotencyKeyHash.Compute(idempotencyKey), ct);
 
         // решение: событие и счётчики — после коммита: откат не оставляет в логе списания, которого не было.
         if (result is EnrollResult.Created created)
@@ -43,7 +44,7 @@ public sealed class EnrollmentService
         return result;
     }
 
-    private Task<EnrollResult> EnrollInTransactionAsync(long userId, long classId, int seats, CancellationToken ct)
+    private Task<EnrollResult> EnrollInTransactionAsync(long userId, long classId, int seats, byte[] keyHash, CancellationToken ct)
     {
         return _transactions.RunAsync<EnrollResult>(Operations.Enroll, async token =>
         {
@@ -52,6 +53,22 @@ public sealed class EnrollmentService
             if (item is null)
             {
                 return TransactionResult.Rollback<EnrollResult>(new EnrollResult.ClassNotFound());
+            }
+
+            var claim = await _unitOfWork.IdempotencyKey.ClaimAsync(
+                new IdempotencyKey
+                {
+                    UserId = userId,
+                    Operation = IdempotentOperation.Enroll,
+                    KeyHash = keyHash,
+                    ClassId = classId,
+                    Seats = seats
+                },
+                token);
+
+            if (!claim.IsNew)
+            {
+                return TransactionResult.Rollback(Replay(claim.Key, classId, seats));
             }
 
             if (item.IsCancelled)
@@ -87,8 +104,19 @@ public sealed class EnrollmentService
 
             await _unitOfWork.SaveChangesAsync(token);
 
+            claim.Key.ResultId = enrollment.Id;
+            claim.Key.ResultCreatedAt = enrollment.CreatedAt;
+            await _unitOfWork.SaveChangesAsync(token);
+
             return TransactionResult.Commit<EnrollResult>(new EnrollResult.Created(enrollment, pass.RemainingVisits));
         }, ct);
+    }
+
+    private static EnrollResult Replay(IdempotencyKey key, long classId, int seats)
+    {
+        return key.ClassId == classId && key.Seats == seats
+            ? new EnrollResult.Replayed(EnrollmentResponse.Replay(key))
+            : new EnrollResult.Rejected(RejectReasons.IdempotencyKeyReused);
     }
 
     private async Task<string?> CheckAsync(Class item, Pass pass, int seats, DateTime now, CancellationToken ct)
