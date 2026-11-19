@@ -17,4 +17,11 @@ public class ClassRepository : GenericRepository<Class>, IClassRepository
             .Include(x => x.Enrollments)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
     }
+
+    public async Task<Class?> FindIncludingCancelledAsync(long id, CancellationToken ct = default)
+    {
+        return await _dbSet
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
+    }
 }

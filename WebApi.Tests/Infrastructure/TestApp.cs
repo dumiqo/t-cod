@@ -19,9 +19,12 @@ public sealed class TestApp : IAsyncDisposable
         _factory = factory;
         Clock = clock;
         RedisKeyPrefix = redisKeyPrefix;
+        Data = new TestData(this);
     }
 
     public FakeTimeProvider Clock { get; }
+
+    public TestData Data { get; }
 
     public string RedisKeyPrefix { get; }
 
