@@ -654,6 +654,8 @@ JSON-лога проверено на запущенном приложении 
 
 #### 8.3 Конкурентность и часы
 
+Статус: готово (664a70a)
+
 - замок занятия `FromSql("... FOR NO KEY UPDATE")` с `IgnoreQueryFilters()` — первое чтение
   в транзакции, заменяет `ClassRepository.FindIncludingCancelledAsync` из 8.1 (обычное чтение
   без блокировки);
