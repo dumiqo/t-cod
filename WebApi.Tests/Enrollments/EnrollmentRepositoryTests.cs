@@ -1,5 +1,6 @@
 using DataAccessLayer;
 using DataAccessLayer.Entities;
+using DataAccessLayer.Repositories;
 using DataAccessLayer.UnitOfWork;
 using Microsoft.EntityFrameworkCore;
 using WebApi.Tests.Infrastructure;
@@ -77,6 +78,110 @@ public class EnrollmentRepositoryTests
         var sum = await new UnitOfWork(context).Enrollment.SumActiveSeatsAsync(classId);
 
         Assert.AreEqual(3L, sum);
+    }
+
+    [TestMethod]
+    [DataRow("active", false)]
+    [DataRow("cancelled", false)]
+    [DataRow("active", true)]
+    [DataRow("cancelled", true)]
+    public async Task GetCardAsync_OwnEnrollment_ReturnsEnrollmentClassRoomAndPass(string status, bool classCancelled)
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var classId = await AddClassAsync(context, cancelled: classCancelled);
+        var user = await context.Users.OrderBy(x => x.Id).FirstAsync();
+        var id = await AddOwnEnrollmentAsync(context, user.Id, classId, 3, status);
+        var pass = await context.Passes.AsNoTracking().SingleAsync(x => x.UserId == user.Id);
+        var room = await context.Rooms.AsNoTracking().OrderBy(x => x.Id).FirstAsync();
+
+        var card = await new UnitOfWork(context).Enrollment.GetCardAsync(id, user.Id);
+
+        Assert.AreEqual(
+            new EnrollmentCard(
+                id,
+                status,
+                3,
+                new DateTime(2029, 12, 1, 10, 0, 0, DateTimeKind.Utc).AddTicks(1234560),
+                new EnrollmentCardClass(
+                    classId,
+                    "Test class",
+                    new DateTime(2030, 1, 1, 10, 0, 0, DateTimeKind.Utc),
+                    60,
+                    classCancelled,
+                    new EnrollmentCardRoom(room.Id, room.Name)),
+                new EnrollmentCardPass(pass.RemainingVisits, pass.ValidUntil)),
+            card);
+    }
+
+    [TestMethod]
+    public async Task GetCardAsync_OtherUsersEnrollment_ReturnsNull()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var classId = await AddClassAsync(context);
+        var users = await context.Users.OrderBy(x => x.Id).Select(x => x.Id).Take(2).ToListAsync();
+        var id = await AddOwnEnrollmentAsync(context, users[0], classId, 1, "active");
+
+        var card = await new UnitOfWork(context).Enrollment.GetCardAsync(id, users[1]);
+
+        Assert.IsNull(card);
+    }
+
+    [TestMethod]
+    [DataRow(999999999L)]
+    [DataRow(0L)]
+    [DataRow(-1L)]
+    public async Task GetCardAsync_UnknownId_ReturnsNull(long id)
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var userId = await context.Users.OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();
+
+        var card = await new UnitOfWork(context).Enrollment.GetCardAsync(id, userId);
+
+        Assert.IsNull(card);
+    }
+
+    [TestMethod]
+    public async Task GetCardAsync_Found_ExecutesExactlyOneCommand()
+    {
+        await using var db = await TestDb.CloneAsync();
+        long id;
+        long userId;
+        await using (var setup = db.CreateContext())
+        {
+            var classId = await AddClassAsync(setup, cancelled: true);
+            userId = await setup.Users.OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();
+            id = await AddOwnEnrollmentAsync(setup, userId, classId, 2, "active");
+        }
+
+        var counter = new CommandCounter();
+        await using var context = db.CreateContext(counter);
+
+        var card = await new UnitOfWork(context).Enrollment.GetCardAsync(id, userId);
+
+        Assert.AreEqual(id, card?.Id);
+        Assert.AreEqual(1, counter.Count);
+    }
+
+    private static async Task<long> AddOwnEnrollmentAsync(ClubDbContext context, long userId, long classId, int seats, string status)
+    {
+        var createdAt = new DateTime(2029, 12, 1, 10, 0, 0, DateTimeKind.Utc).AddTicks(1234560);
+        var enrollment = new Enrollment
+        {
+            UserId = userId,
+            ClassId = classId,
+            Seats = seats,
+            Status = status,
+            CreatedAt = createdAt,
+            CancelledAt = status == "cancelled" ? createdAt : null
+        };
+        context.Enrollments.Add(enrollment);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        return enrollment.Id;
     }
 
     private static async Task<long> AddClassAsync(ClubDbContext context, int capacity = 10, bool cancelled = false)

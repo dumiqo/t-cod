@@ -1,6 +1,7 @@
 using DataAccessLayer;
 using DataAccessLayer.Seeding;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 
 namespace WebApi.Tests.Infrastructure;
@@ -41,6 +42,11 @@ public sealed class TestDb : IAsyncDisposable
         return CreateContext(ConnectionString);
     }
 
+    public ClubDbContext CreateContext(params IInterceptor[] interceptors)
+    {
+        return CreateContext(ConnectionString, interceptors);
+    }
+
     public async ValueTask DisposeAsync()
     {
         await DropAsync(_name);
@@ -79,10 +85,11 @@ public sealed class TestDb : IAsyncDisposable
         return new DateTimeOffset(earliestClass, TimeSpan.Zero) + EarliestClassBeforeSeed;
     }
 
-    private static ClubDbContext CreateContext(string connectionString)
+    private static ClubDbContext CreateContext(string connectionString, params IInterceptor[] interceptors)
     {
         var options = new DbContextOptionsBuilder<ClubDbContext>()
             .UseNpgsql(connectionString)
+            .AddInterceptors(interceptors)
             .Options;
 
         return new ClubDbContext(options);

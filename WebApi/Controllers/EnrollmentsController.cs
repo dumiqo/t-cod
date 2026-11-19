@@ -37,4 +37,12 @@ public class EnrollmentsController : ClubApiController
             _ => throw new InvalidOperationException($"Unknown enroll result {result}.")
         };
     }
+
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetCard(long id, CancellationToken ct)
+    {
+        var card = await _enrollments.GetCardAsync(CurrentUserId, id, ct);
+
+        return card is null ? NotFound() : Ok(EnrollmentCardResponse.From(card));
+    }
 }

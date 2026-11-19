@@ -1,4 +1,5 @@
 using DataAccessLayer.Entities;
+using DataAccessLayer.Repositories;
 using DataAccessLayer.Transactions;
 using DataAccessLayer.UnitOfWork;
 using WebApi.Idempotency;
@@ -48,6 +49,11 @@ public sealed class EnrollmentService
         }
 
         return result;
+    }
+
+    public Task<EnrollmentCard?> GetCardAsync(long userId, long id, CancellationToken ct)
+    {
+        return _unitOfWork.Enrollment.GetCardAsync(id, userId, ct);
     }
 
     private Task<EnrollResult> EnrollInTransactionAsync(long userId, long classId, int seats, byte[] keyHash, CancellationToken ct)

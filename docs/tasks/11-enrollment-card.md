@@ -55,3 +55,15 @@
   Счётчик — `Infrastructure/CommandCounter.cs` (`DbCommandInterceptor`, все выполненные команды)
   и перегрузка `TestDb.CreateContext(params IInterceptor[])`. Что `AddInterceptors`
   и перехватчик в EF Core 9 работают так — проверить до кода.
+
+Найдено при реализации:
+
+- у репозитория есть только `DbSet<Enrollment>`; набор абонементов для `JOIN` берётся через
+  `_dbSet.GetService<ICurrentDbContext>().Context.Set<Pass>()` — навигации и миграции не нужны;
+- `IgnoreQueryFilters()` действует на весь запрос, включая `x.Class` в проекции. Проверено поломкой:
+  без него 4 теста на отменённое занятие (репозиторий и эндпоинт) красные;
+- тест «ровно одна команда» проверен поломкой: лишний `CountAsync` по абонементам →
+  `Expected:<1>. Actual:<2>`;
+- `System.Text.Json` пишет `DateTime` с `Z` и отбрасывает хвостовые нули дробной части:
+  `…:00Z`, `…:00.123456Z`; `DateOnly` — `"2026-09-22"` без настроек;
+- нечисловой id в пути (`abc`, `1.5`, больше `long`) — `400` с ключом `id` от `[ApiController]`.
