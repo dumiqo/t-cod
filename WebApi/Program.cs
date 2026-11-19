@@ -5,12 +5,14 @@ using DataAccessLayer.Entities;
 using DataAccessLayer.Seeding;
 using DataAccessLayer.UnitOfWork;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
 using WebApi.Auth;
 using WebApi.Middleware;
+using WebApi.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,7 +26,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddProblemDetails();
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks().AddClubReadinessChecks();
 
 builder.Services.AddDbContext<ClubDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
@@ -74,7 +76,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = x => x.Tags.Contains(ReadinessChecks.Tag) })
+    .AllowAnonymous();
 
 app.Services.GetRequiredService<IConnectionMultiplexer>();
 

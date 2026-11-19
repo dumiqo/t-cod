@@ -32,7 +32,8 @@ Postgres is on host port 5433 and Redis on 6380 (not the defaults). Tests honour
 - `DataAccessLayer` — `ClubDbContext` (configurations applied from the assembly), entities
   `User/Room/Class/Enrollment/Pass`, typed repositories exposed as `IUnitOfWork.Room/Class/Enrollment/Pass`,
   `DatabaseSeeder`, migrations. `Class` has a global query filter `!IsCancelled`.
-- `WebApi` — everything is wired in `Program.cs`: on startup it migrates, seeds and connects to Redis
+- `WebApi` — `/health` (liveness, runs no checks) and `/health/ready` (Postgres and Redis checks
+  in `Observability/`, JSON console logs). Everything is wired in `Program.cs`: on startup it migrates, seeds and connects to Redis
   eagerly (no Redis → no start). JWT validation with `ClockSkew = Zero`. `ExceptionHandlingMiddleware`
   turns any unhandled exception (including DB conflicts) into a 500 ProblemDetails. Controllers
   derive from `BaseApiController` (`CurrentUserId`, `IsAdmin`).
@@ -41,7 +42,9 @@ Postgres is on host port 5433 and Redis on 6380 (not the defaults). Tests honour
   - `TestApp.StartAsync()` — one per HTTP test (`await using`): its own clone of a seeded template DB,
     its own `WebApplicationFactory`, a stopped `FakeTimeProvider` at the seed moment (`app.Clock`,
     `app.SeededAt`), its own Redis key prefix (`app.Redis` sees keys as the app does),
-    `app.CreateContext()` to check the DB, `app.CreateClientAsync(email)` for a logged-in client.
+    `app.CreateContext()` to check the DB, `app.CreateClientAsync(email)` for a logged-in client,
+    `app.Logs` (`FakeLogCollector`, filtered by the host's log levels) to check log events.
+    `StartAsync(builder => ...)` customises the host (runs last: `ConfigureTestServices`, config).
     Controllers from the test assembly are mounted (`HarnessController`, `GET /harness/me`).
   - `TestDb.CloneAsync()` — just a clone, for repository tests. The template is built lazily once per
     run and dropped in `TestDatabase.CleanupAsync`; a clone is dropped on dispose.

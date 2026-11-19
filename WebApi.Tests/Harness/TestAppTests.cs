@@ -5,8 +5,10 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using Common.Caching;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
 using WebApi.Auth;
@@ -104,6 +106,34 @@ public class TestAppTests
     }
 
     [TestMethod]
+    public async Task StartAsync_Logs_CollectsLogsOfHost()
+    {
+        await using var app = await TestApp.StartAsync();
+        var marker = Guid.NewGuid().ToString("N");
+
+        app.Services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Harness")
+            .LogInformation("Marker {Marker}", marker);
+
+        var records = app.Logs.GetSnapshot().Where(x => x.Category == "Harness").ToList();
+
+        Assert.AreEqual(1, records.Count);
+        Assert.AreEqual(LogLevel.Information, records[0].Level);
+        Assert.AreEqual(marker, records[0].GetStructuredStateValue("Marker"));
+    }
+
+    [TestMethod]
+    public async Task StartAsync_Configure_AppliedToHost()
+    {
+        var marker = new HarnessMarker();
+
+        await using var app = await TestApp.StartAsync(builder =>
+            builder.ConfigureTestServices(services => services.AddSingleton(marker)));
+
+        Assert.AreSame(marker, app.Services.GetService<HarnessMarker>());
+    }
+
+    [TestMethod]
     public async Task DisposeAsync_App_DropsItsClone()
     {
         var app = await TestApp.StartAsync();
@@ -137,4 +167,6 @@ public class TestAppTests
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    private sealed class HarnessMarker;
 }

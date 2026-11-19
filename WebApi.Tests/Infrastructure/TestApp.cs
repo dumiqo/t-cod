@@ -1,6 +1,8 @@
 using System.Net.Http.Headers;
 using DataAccessLayer;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using StackExchange.Redis;
 
@@ -31,13 +33,15 @@ public sealed class TestApp : IAsyncDisposable
 
     public IDatabase Redis => Services.GetRequiredService<IConnectionMultiplexer>().GetDatabase();
 
-    public static async Task<TestApp> StartAsync()
+    public FakeLogCollector Logs => Services.GetRequiredService<FakeLogCollector>();
+
+    public static async Task<TestApp> StartAsync(Action<IWebHostBuilder>? configure = null)
     {
         var db = await TestDb.CloneAsync();
         // решение: часы стоят на моменте засева и двигаются только тестом — границы времени детерминированы.
         var clock = new FakeTimeProvider(db.SeededAt);
         var redisKeyPrefix = $"test:{Guid.NewGuid():N}:";
-        var factory = new TestAppFactory(db.ConnectionString, clock, redisKeyPrefix);
+        var factory = new TestAppFactory(db.ConnectionString, clock, redisKeyPrefix, configure);
 
         try
         {

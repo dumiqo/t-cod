@@ -309,38 +309,79 @@ JSON-лога проверено на запущенном приложении 
 
 #### 7.4 Наблюдаемость
 
-Основа по решению задачи 6. Из инструментов — только то, что нужно сейчас:
-`club.requests.rejected` и события отказов для 7.3 и 7.2. Остальные счётчики и события заводит
-задача, которая их порождает, со своим тестом.
+Основа по решению задачи 6: JSON-логи, готовность, доступ к логам в тестах, тест на утечки.
+Инструментов здесь нет: `ClubMetrics`, класс `Log` и `club.requests.rejected` заводит 7.3,
+событие `503` — 7.2, каждый со своим сквозным тестом. Без вызывающего кода их проверял бы
+только тест, который сам их и вызывает.
 
-- `appsettings.json`: `Logging:Console:FormatterName = json`, `FormatterOptions:IncludeScopes =
-  true`; `Microsoft.AspNetCore` остаётся на Warning;
-- `Meter` `FitnessClub.Api` через `IMeterFactory`; инструменты держит singleton `ClubMetrics`.
-  Что `IMeterFactory` регистрируется хостом по умолчанию, не проверено
-  (`Microsoft.Extensions.Hosting.dll` 9.0.23 ссылается на `AddMetrics` — косвенный признак):
-  закрепить первым тестом, что он разрешается из DI;
-- события — через `[LoggerMessage]` с постоянными `EventId`, в одном классе на приложение
-  (`static partial class Log` в `WebApi/Observability/`), диапазоны по областям: 1xxx — отказы
-  и инфраструктура, 2xxx — запись и брони, 3xxx — очередь и т. д.; в тестах — проверка
-  по `EventId`;
-- события успеха — после коммита транзакции, не внутри: откат не должен оставлять их в логе;
-- `/health/ready`: свои `IHealthCheck` без доп. пакетов — база (`CanConnectAsync`) и Redis
-  (`PingAsync`), тег `ready`, `AddCheck<T>(name, failureStatus, tags, timeout)` с `timeout`
-  3 секунды; Redis — `failureStatus: Degraded`, база — `Unhealthy`. Анонимный (`AllowAnonymous`),
-  ответ — только статус, причина падения — в лог на Warning. Вне лимита — в задаче 28;
+- `appsettings.json`: `Logging:Console:FormatterName = json`, `FormatterOptions`:
+  `IncludeScopes = true`, `UseUtcTimestamp = true`, `TimestampFormat` с `Z` — JSON-форматтер
+  без него время не пишет. `Microsoft.AspNetCore` остаётся на Warning. Автотеста нет — он
+  повторил бы конфиг; проверка — запуск по `README`, строка лога с `TraceId` в отчёте;
+- `/health/ready`: свои `IHealthCheck` без доп. пакетов, регистрация — расширение
+  `AddClubReadinessChecks()`, его зовут `Program` и тест проверок. База — `SELECT 1`
+  (`failureStatus: Unhealthy`), Redis — `PingAsync` (`Degraded`), тег `ready`,
+  `AddCheck<T>(name, failureStatus, tags, timeout)` с `timeout` 3 секунды. Анонимный
+  (`AllowAnonymous`), ответ — только статус. Вне лимита — в задаче 28;
+- причину падения пишет встроенный `DefaultHealthCheckService`, своего события нет;
 - у `MapHealthChecks("/health")` фильтр `Predicate = _ => false`, иначе он запустит новые
   проверки;
 - тесты проверок: сломать базу или Redis в хосте теста нельзя — приложение при старте мигрирует
-  и подключается к Redis. Поэтому два теста: сама проверка (база на закрытом порту — `Unhealthy`,
-  Redis на закрытом соединении — `Degraded`) и проводка (хост теста подменяет проверку с тегом
-  `ready` на падающую: `/health` отвечает `200 Healthy`, `/health/ready` — `503`; без токена —
-  не `401`);
-- тестовый пакет `Microsoft.Extensions.Diagnostics.Testing` (`FakeLogCollector`,
-  `MetricCollector`); в кэше NuGet его нет — скачать, версия линейки 9.x, проверить, что оба
-  класса в ней есть. Тест: после `POST /auth/login` в логе нет email, пароля и выданного токена.
+  и подключается к Redis. Поэтому: сама проверка через настоящий `HealthCheckService` (база
+  на закрытом порту — `Unhealthy` и Error в логе, Redis на закрытом соединении — `Degraded`
+  и Warning), тайм-аут на «молчащем» `TcpListener` и проводка (хост теста добавляет падающую
+  проверку с тегом `ready`: `/health` отвечает `200 Healthy`, `/health/ready` — `503`);
+- `TestApp.StartAsync(Action<IWebHostBuilder>? configure)` и `app.Logs` (`FakeLogCollector`
+  из `Microsoft.Extensions.Diagnostics.Testing` 9.10.0);
+- тест на утечки: все категории на Trace, вход и запрос с токеном — в тексте, полях, scope
+  и исключениях нет email, пароля и токена; записей EF и JwtBearer больше нуля. Что тест ловит
+  регрессию — проверить временным `EnableSensitiveDataLogging`.
+
+Проверено до кода (пробная программа на тех же пакетах):
+
+- `CanConnectAsync` на закрытом порту возвращает `false`, исключение проглочено — причина
+  не попала бы в лог. Отсюда `SELECT 1`;
+- проверка, которая бросает, пишется встроенным логом как `HealthCheckError` (#104) на Error
+  при любом `failureStatus`, тайм-аут тоже. Возвращённый статус — `HealthCheckEnd` (#103):
+  `Degraded` на Warning, `Unhealthy` на Error, с исключением. Поэтому проверки ловят исключение
+  и возвращают `context.Registration.FailureStatus` с ним;
+- `timeout` регистрации только отменяет токен: проверка, которая его не слушает, шла 5 секунд
+  при тайм-ауте 300 мс. У `PingAsync` токена нет, отсюда `WaitAsync(ct)`. Ping на закрытый порт
+  без него — `RedisConnectionException` через 5 секунд (`AsyncTimeout`);
+- проверка со scoped-зависимостью (`ClubDbContext`) разрешается при `ValidateScopes`;
+- в пакете 9.10.0 есть `FakeLogCollector` и `MetricCollector(IMeterFactory, meter, instrument)`.
+  `IMeterFactory` в голом `ServiceCollection` нет (нужен `AddMetrics`); есть ли он в хосте —
+  проверить первым тестом 7.3.
+
+Найдено при реализации:
+
+- Npgsql не прерывает по токену подключение к молчащему серверу: проверка базы шла 10 секунд
+  (`Timeout` строки теста). `WaitAsync` вокруг запроса EF не годится: scope уничтожает контекст,
+  пока соединение в `Connecting`, и `HealthCheckService` бросает `InvalidOperationException`
+  («Can't close, connection is in state Connecting») — на `/health/ready` это был бы `500`.
+  Проверка базы открывает своё `NpgsqlConnection` со строкой контекста и `Timeout`,
+  `CommandTimeout` = 3 секунды (та же константа, что у регистрации); по тайм-ауту —
+  `NpgsqlException` с `TimeoutException` внутри;
+- `GetConnectionString()` контекста строит модель EF, и в лог попадает её предупреждение
+  валидации (`Class` с фильтром — обязательная сторона связи с `Enrollment`). Тест лога
+  готовности смотрит только категорию `DefaultHealthCheckService`;
+- что тесты ловят регрессию, проверено поломкой: без `WaitAsync` у Redis — 5 секунд вместо 3;
+  без тайм-аутов Npgsql — 10,3 секунды; Redis-проверка бросает — `HealthCheckError` вместо
+  `HealthCheckEnd`; `EnableSensitiveDataLogging` — тест утечек находит email в 4 записях EF;
+- запуск по `README` на чистой базе: `/health` и `/health/ready` — `200 Healthy`. Postgres
+  остановлен — `/health/ready` `503 Unhealthy` за 0,08 секунды, в логе Error с `NpgsqlException`,
+  `/health` по-прежнему `200`; Redis остановлен — `200 Degraded` за 3,0 секунды, Warning
+  с `TaskCanceledException`. `traceId` ответа `500` найден `grep` в трёх JSON-строках лога, email
+  и пароль в лог не попали.
 
 #### 7.3 Правила контракта
 
+- инструменты из 7.4 (решение задачи 6): `Meter` `FitnessClub.Api` через `IMeterFactory`,
+  singleton `ClubMetrics` со счётчиком `club.requests.rejected{operation, reason}`; события —
+  `[LoggerMessage]` с постоянными `EventId` в `static partial class Log`
+  (`WebApi/Observability/`), диапазоны: 1xxx — отказы и инфраструктура, 2xxx — запись и брони,
+  3xxx — очередь и т. д. События успеха — после коммита. Тесты — `app.Logs` по `EventId`
+  и `MetricCollector` от `IMeterFactory` хоста;
 - свой базовый контроллер `ClubApiController : BaseApiController`, выданный не меняется;
 - `[Authorize]` — на `ClubApiController`: `FallbackPolicy` закроет `/auth/login`, `/health`
   и Swagger и сломает тесты в `Existing`;
@@ -395,7 +436,7 @@ JSON-лога проверено на запущенном приложении 
 - тайм-аут блокировки (`55P03`) и взаимоблокировка (`40P01`) → `503` с `Retry-After: 1`
   и ProblemDetails через глобальный фильтр исключений MVC. Что фильтр срабатывает раньше
   `ExceptionHandlingMiddleware` — проверить первым тестом. `503` логируется и считается в фильтре
-  (`club.requests.rejected`);
+  (`club.requests.rejected`); событие `503` на Warning заводится здесь, в `Log` из 7.3;
 - EF без стратегии повторов оборачивает эти ошибки в `InvalidOperationException`, нарушение
   ограничения — в `DbUpdateException`: распознавать по внутреннему `PostgresException.SqlState`.
   `IsTransient` не подходит: он `true` и для тайм-аута блокировки. Обёртки закрепить тестом —

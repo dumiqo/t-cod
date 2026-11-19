@@ -13,12 +13,18 @@ internal sealed class TestAppFactory : ApiApplicationFactory
     private readonly string _connectionString;
     private readonly FakeTimeProvider _clock;
     private readonly string _redisKeyPrefix;
+    private readonly Action<IWebHostBuilder>? _configure;
 
-    public TestAppFactory(string connectionString, FakeTimeProvider clock, string redisKeyPrefix)
+    public TestAppFactory(
+        string connectionString,
+        FakeTimeProvider clock,
+        string redisKeyPrefix,
+        Action<IWebHostBuilder>? configure)
     {
         _connectionString = connectionString;
         _clock = clock;
         _redisKeyPrefix = redisKeyPrefix;
+        _configure = configure;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -46,6 +52,10 @@ internal sealed class TestAppFactory : ApiApplicationFactory
                 _redisKeyPrefix));
 
             services.AddControllers().AddApplicationPart(typeof(TestAppFactory).Assembly);
+
+            services.AddFakeLogging();
         });
+
+        _configure?.Invoke(builder);
     }
 }
