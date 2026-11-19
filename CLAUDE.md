@@ -36,7 +36,11 @@ Postgres is on host port 5433 and Redis on 6380 (not the defaults). Tests honour
   in `Observability/`, JSON console logs). Everything is wired in `Program.cs`: on startup it migrates, seeds and connects to Redis
   eagerly (no Redis → no start). JWT validation with `ClockSkew = Zero`. `ExceptionHandlingMiddleware`
   turns any unhandled exception (including DB conflicts) into a 500 ProblemDetails. Controllers
-  derive from `BaseApiController` (`CurrentUserId`, `IsAdmin`).
+  derive from `BaseApiController` (`CurrentUserId`, `IsAdmin`); our endpoints derive from
+  `ClubApiController` (`[Authorize]`, `Reject(operation, reason)` → 409 with `reason`, event 1001 and
+  `club.requests.rejected`). Instruments: `Observability/ClubMetrics`, `Observability/Log`.
+  Query time/date params bind with `[ModelBinder(typeof(UtcDateTimeModelBinder|IsoDateModelBinder))]`
+  (`Binding/`); required body: `[FromBody, Required] T? request`; JSON numbers are strict.
 - `WebApi.Tests` — test isolation per the decision of task 5 (`NOTES.md`, «Изоляция тестов»). Tests run
   in parallel (`Parallelization.cs`, 8 workers); race tests are `[DoNotParallelize]`.
   - `TestApp.StartAsync()` — one per HTTP test (`await using`): its own clone of a seeded template DB,

@@ -420,6 +420,37 @@ JSON-лога проверено на запущенном приложении 
   `Content-Type`: `415` и на Kestrel, и на TestServer. Решает `CanHaveBody`, а при chunked он
   `true` даже для нуля байт (проверено).
 
+Решено при разборе (вопросы и ответы до кода):
+
+- `operation` — явный аргумент `Reject`, значения в kebab-case, как у `reason`: `enroll`,
+  `change-seats`, `cancel-enrollment`, `get-enrollment`, `schedule`, `occupancy`, `join-waitlist`,
+  `leave-waitlist`. Классы `Operations` и `RejectReasons` заводит задача 8 — в 7.3 их константами
+  никто не пользуется, проба берёт свои;
+- тело `409` — `type`, `title`, `status`, `traceId`, `reason`, без `detail`;
+- событие отказа — `EventId` 1001 `RequestRejected`, Information, поля `Operation`, `Reason`,
+  `UserId`; id сущностей не пишутся — путь виден в scope хостинга (`RequestPath`). 1002 оставлен
+  для `503` (7.2), 1003 — для `429` (28);
+- дата-время — `DateTime` с `Kind = Utc`: дробь от 1 до 7 цифр (формат `O` в .NET даёт 7), `T`
+  и `Z` только заглавные, смещение не больше 14:00, секунда `60` и выход за диапазон `DateTime`
+  после приведения к UTC — `400`;
+- обязательные числа тела — `[Required] int?`, не `[JsonRequired] int`: ошибка по имени поля.
+
+Найдено при реализации:
+
+- `IMeterFactory` в хосте есть: `MetricCollector` от `IMeterFactory` хоста видит счётчик,
+  `AddMetrics` не нужен. `RequestPath` и `TraceId` есть в scope записи `FakeLogCollector`;
+- пустое тело решено без своего кода: `[FromBody, Required] T? request` — nullable не даёт `415`,
+  `[Required]` превращает `null` в стандартный `400` «The body field is required.» под ключом
+  `""`. Фильтр не понадобился. Число в кавычках даёт две ошибки: `$.seats` и `body` (тело после
+  ошибки разбора — `null`);
+- `reason` кладётся в `Extensions` того, что вернула `ProblemDetailsFactory`; `title` и `type`
+  для `409` она берёт из `ClientErrorMapping`;
+- у отсутствующего параметра `ModelName` в binder'е пустой: без подстановки `FieldName` ошибка
+  уходит под ключ `""` с текстом «The  field is required.» (проверено поломкой);
+- binder'ы — одна общая логика `RequiredQueryValueBinding`: отсутствие и пустое значение —
+  «The from field is required.», неверный формат — стандартный текст
+  `AttemptedValueIsInvalidAccessor`.
+
 #### 7.2 Транзакции и отказы
 
 По решению задачи 4:

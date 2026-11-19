@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using Common.Caching;
 using DataAccessLayer;
 using DataAccessLayer.Entities;
@@ -22,11 +23,14 @@ builder.Host.UseDefaultServiceProvider(options =>
     options.ValidateOnBuild = true;
 });
 
-builder.Services.AddControllers();
+// решение: число в кавычках — 400: веб-настройки System.Text.Json читают числа из строк, а в контракте поля числовые.
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.NumberHandling = JsonNumberHandling.Strict);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddClubReadinessChecks();
+builder.Services.AddSingleton<ClubMetrics>();
 
 builder.Services.AddDbContext<ClubDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
