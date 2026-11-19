@@ -20,4 +20,17 @@ public static partial class Log
         string operation,
         string reason,
         long userId);
+
+    [LoggerMessage(
+        EventId = 2001,
+        EventName = "EnrollmentCreated",
+        Level = LogLevel.Information,
+        Message = "Enrollment created: {EnrollmentId} class {ClassId} seats {Seats} for user {UserId}, remaining {RemainingVisits}")]
+    public static partial void EnrollmentCreated(
+        ILogger logger,
+        long enrollmentId,
+        long classId,
+        int seats,
+        long userId,
+        int remainingVisits);
 }

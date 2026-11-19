@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
 using WebApi.Auth;
+using WebApi.Tests.Contract;
 using WebApi.Tests.Infrastructure;
 
 namespace WebApi.Tests.Harness;
@@ -120,6 +121,42 @@ public class TestAppTests
         Assert.AreEqual(1, records.Count);
         Assert.AreEqual(LogLevel.Information, records[0].Level);
         Assert.AreEqual(marker, records[0].GetStructuredStateValue("Marker"));
+    }
+
+    [TestMethod]
+    public async Task StartAsync_Metrics_CollectsCountersOfHostFromStart()
+    {
+        await using var app = await TestApp.StartAsync();
+        await using var other = await TestApp.StartAsync();
+        using var client = await app.CreateClientAsync(AuthClient.SeededUser);
+
+        using var response = await client.PostAsync("/probe/reject", null);
+
+        Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
+        var measurements = app.Metrics("club.requests.rejected").GetMeasurementSnapshot();
+        Assert.AreEqual(1, measurements.Count);
+        var measurement = measurements[0];
+        Assert.AreEqual(1, measurement.Value);
+        CollectionAssert.AreEquivalent(
+            new Dictionary<string, object?>
+            {
+                ["operation"] = ContractProbeController.Operation,
+                ["reason"] = ContractProbeController.Reason
+            },
+            measurement.Tags.ToDictionary(x => x.Key, x => x.Value));
+        Assert.AreEqual(0, other.Metrics("club.requests.rejected").GetMeasurementSnapshot().Count);
+        Assert.AreEqual(0, app.Metrics("club.enrollments.created").GetMeasurementSnapshot().Count);
+        Assert.AreEqual(0, app.Metrics("club.visits.charged").GetMeasurementSnapshot().Count);
+    }
+
+    [TestMethod]
+    public async Task Metrics_UnknownInstrument_Throws()
+    {
+        await using var app = await TestApp.StartAsync();
+
+        var exception = Assert.ThrowsException<ArgumentException>(() => app.Metrics("club.unknown"));
+
+        StringAssert.Contains(exception.Message, "club.unknown");
     }
 
     [TestMethod]

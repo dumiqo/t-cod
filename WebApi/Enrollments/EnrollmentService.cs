@@ -1,6 +1,7 @@
 using DataAccessLayer.Entities;
 using DataAccessLayer.Transactions;
 using DataAccessLayer.UnitOfWork;
+using WebApi.Observability;
 using WebApi.Time;
 
 namespace WebApi.Enrollments;
@@ -10,15 +11,39 @@ public sealed class EnrollmentService
     private readonly IUnitOfWork _unitOfWork;
     private readonly TransactionRunner _transactions;
     private readonly TimeProvider _clock;
+    private readonly ILogger<EnrollmentService> _logger;
+    private readonly ClubMetrics _metrics;
 
-    public EnrollmentService(IUnitOfWork unitOfWork, TransactionRunner transactions, TimeProvider clock)
+    public EnrollmentService(
+        IUnitOfWork unitOfWork,
+        TransactionRunner transactions,
+        TimeProvider clock,
+        ILogger<EnrollmentService> logger,
+        ClubMetrics metrics)
     {
         _unitOfWork = unitOfWork;
         _transactions = transactions;
         _clock = clock;
+        _logger = logger;
+        _metrics = metrics;
     }
 
-    public Task<EnrollResult> EnrollAsync(long userId, long classId, int seats, CancellationToken ct)
+    public async Task<EnrollResult> EnrollAsync(long userId, long classId, int seats, CancellationToken ct)
+    {
+        var result = await EnrollInTransactionAsync(userId, classId, seats, ct);
+
+        // решение: событие и счётчики — после коммита: откат не оставляет в логе списания, которого не было.
+        if (result is EnrollResult.Created created)
+        {
+            Log.EnrollmentCreated(_logger, created.Enrollment.Id, classId, seats, userId, created.RemainingVisits);
+            _metrics.EnrollmentCreated(seats);
+            _metrics.VisitsCharged(seats);
+        }
+
+        return result;
+    }
+
+    private Task<EnrollResult> EnrollInTransactionAsync(long userId, long classId, int seats, CancellationToken ct)
     {
         return _transactions.RunAsync<EnrollResult>(Operations.Enroll, async token =>
         {
@@ -62,7 +87,7 @@ public sealed class EnrollmentService
 
             await _unitOfWork.SaveChangesAsync(token);
 
-            return TransactionResult.Commit<EnrollResult>(new EnrollResult.Created(enrollment));
+            return TransactionResult.Commit<EnrollResult>(new EnrollResult.Created(enrollment, pass.RemainingVisits));
         }, ct);
     }
 

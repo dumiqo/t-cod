@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using DataAccessLayer.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Testing;
 using WebApi.Tests.Infrastructure;
 
 namespace WebApi.Tests.Enrollments;
@@ -62,6 +63,40 @@ public static class EnrollApi
 
         Assert.IsFalse(await context.Enrollments.AnyAsync(x => x.UserId == user.Id));
         Assert.AreEqual(remainingVisits, await RemainingVisitsAsync(app, user));
+        var events = CreatedEvents(app);
+        Assert.IsFalse(events.Any(x => x.GetStructuredStateValue("UserId") == user.Id.ToString()));
+        var seats = events.Sum(x => long.Parse(x.GetStructuredStateValue("Seats") ?? string.Empty));
+        Assert.AreEqual(seats, MetricSum(app, "club.enrollments.created"));
+        Assert.AreEqual(seats, MetricSum(app, "club.visits.charged"));
+    }
+
+    public static IReadOnlyList<FakeLogRecord> CreatedEvents(TestApp app)
+    {
+        return app.Logs.GetSnapshot().Where(x => x.Id.Id == 2001).ToList();
+    }
+
+    public static IReadOnlyList<FakeLogRecord> RejectedEvents(TestApp app)
+    {
+        return app.Logs.GetSnapshot().Where(x => x.Id.Id == 1001).ToList();
+    }
+
+    public static long MetricSum(TestApp app, string instrument)
+    {
+        return app.Metrics(instrument).GetMeasurementSnapshot().Sum(x => x.Value);
+    }
+
+    public static void AssertRejectionsCounted(TestApp app, string reason, int count)
+    {
+        var measurements = app.Metrics("club.requests.rejected").GetMeasurementSnapshot();
+
+        Assert.AreEqual(count, measurements.Count);
+        foreach (var measurement in measurements)
+        {
+            Assert.AreEqual(1, measurement.Value);
+            CollectionAssert.AreEquivalent(
+                new Dictionary<string, object?> { ["operation"] = "enroll", ["reason"] = reason },
+                measurement.Tags.ToDictionary(x => x.Key, x => x.Value));
+        }
     }
 
     public static async Task AssertNoEnrollmentsAsync(TestApp app, long classId)

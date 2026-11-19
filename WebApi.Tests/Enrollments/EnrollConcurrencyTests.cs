@@ -54,6 +54,13 @@ public class EnrollConcurrencyTests
             Assert.AreEqual(user.Id == winner ? 9 : 10, await RemainingVisitsAsync(app, user));
         }
 
+        CollectionAssert.AreEqual(
+            new[] { winner.ToString() },
+            CreatedEvents(app).Select(x => x.GetStructuredStateValue("UserId")).ToArray());
+        Assert.AreEqual(1, MetricSum(app, "club.enrollments.created"));
+        Assert.AreEqual(1, MetricSum(app, "club.visits.charged"));
+        AssertRejectionsCounted(app, "capacity-exceeded", 4);
+
         DisposeAll(responses, clients);
     }
 
@@ -79,6 +86,10 @@ public class EnrollConcurrencyTests
         Assert.AreEqual(0, await RemainingVisitsAsync(app, user));
         await using var context = app.CreateContext();
         Assert.AreEqual(1, await context.Enrollments.CountAsync(x => x.UserId == user.Id));
+        Assert.AreEqual(1, CreatedEvents(app).Count);
+        Assert.AreEqual(1, MetricSum(app, "club.enrollments.created"));
+        Assert.AreEqual(1, MetricSum(app, "club.visits.charged"));
+        AssertRejectionsCounted(app, "pass-exhausted", 1);
 
         DisposeAll(responses, []);
     }
@@ -106,6 +117,10 @@ public class EnrollConcurrencyTests
 
         await using var context = app.CreateContext();
         Assert.AreEqual(5, await context.Enrollments.Where(x => x.ClassId == classId && x.Status == "active").SumAsync(x => x.Seats));
+        Assert.AreEqual(5, CreatedEvents(app).Count);
+        Assert.AreEqual(5, MetricSum(app, "club.enrollments.created"));
+        Assert.AreEqual(5, MetricSum(app, "club.visits.charged"));
+        AssertRejectionsCounted(app, "capacity-exceeded", 15);
 
         DisposeAll(responses, clients);
     }
