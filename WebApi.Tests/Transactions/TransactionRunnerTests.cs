@@ -122,25 +122,61 @@ public class TransactionRunnerTests
     }
 
     [TestMethod]
-    public async Task RunAsync_LockTimeoutOnSaveChanges_ThrowsConflict()
+    public async Task RunAsync_LockTimeoutOnSaveChanges_ThrowsConflictAndRollsBack()
     {
         await using var db = await TestDb.CloneAsync();
         await using var context = db.CreateContext();
         var (runner, unitOfWork) = CreateRunner(context);
-        var passId = await context.Passes.OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();
-        await using var held = await HeldLock.AcquireAsync(db.ConnectionString, $"SELECT 1 FROM passes WHERE id = {passId} FOR UPDATE");
+        var passes = await context.Passes.AsNoTracking().OrderBy(x => x.Id).Take(2).ToArrayAsync();
+        await using var held = await HeldLock.AcquireAsync(db.ConnectionString, $"SELECT 1 FROM passes WHERE id = {passes[1].Id} FOR UPDATE");
 
         var exception = await Assert.ThrowsExceptionAsync<TransactionConflictException>(() =>
             runner.RunAsync(Operation, async ct =>
             {
-                var tracked = await unitOfWork.Pass.GetByIdAsync(passId, ct);
-                tracked!.RemainingVisits += 1;
+                var free = await unitOfWork.Pass.GetByIdAsync(passes[0].Id, ct);
+                free!.RemainingVisits += 1;
+                await unitOfWork.SaveChangesAsync(ct);
+                var locked = await unitOfWork.Pass.GetByIdAsync(passes[1].Id, ct);
+                locked!.RemainingVisits += 1;
                 await unitOfWork.SaveChangesAsync(ct);
                 return TransactionResult.Commit(0);
             }));
 
         Assert.AreEqual(Operation, exception.Operation);
         Assert.AreEqual("lock-timeout", exception.Reason);
+        Assert.AreEqual(passes[0].RemainingVisits, await RemainingVisitsAsync(db, passes[0].Id));
+        Assert.AreEqual(passes[1].RemainingVisits, await RemainingVisitsAsync(db, passes[1].Id));
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task RunAsync_Deadlock_ThrowsConflictWithDeadlockReasonAndRollsBack()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var (runner, unitOfWork) = CreateRunner(context, TimeSpan.FromSeconds(2));
+        var pass = await context.Passes.AsNoTracking().OrderBy(x => x.Id).FirstAsync();
+        var classIds = await context.Classes.OrderBy(x => x.Id).Select(x => x.Id).Take(2).ToArrayAsync();
+        await using var held = await HeldLock.AcquireAsync(db.ConnectionString, $"SELECT 1 FROM classes WHERE id = {classIds[1]} FOR UPDATE");
+
+        var run = runner.RunAsync(Operation, async ct =>
+        {
+            var tracked = await unitOfWork.Pass.GetByIdAsync(pass.Id, ct);
+            tracked!.RemainingVisits += 1;
+            await unitOfWork.SaveChangesAsync(ct);
+            await context.Classes.FromSql($"SELECT * FROM classes WHERE id = {classIds[0]} FOR NO KEY UPDATE").ToListAsync(ct);
+            await context.Classes.FromSql($"SELECT * FROM classes WHERE id = {classIds[1]} FOR NO KEY UPDATE").ToListAsync(ct);
+            return TransactionResult.Commit(0);
+        });
+        await held.WaitForBlockedAsync(1);
+        await held.ExecuteAsync($"SELECT 1 FROM classes WHERE id = {classIds[0]} FOR UPDATE");
+
+        var exception = await Assert.ThrowsExceptionAsync<TransactionConflictException>(() => run);
+
+        Assert.AreEqual(Operation, exception.Operation);
+        Assert.AreEqual("deadlock", exception.Reason);
+        Assert.AreEqual(PostgresErrorCodes.DeadlockDetected, ((PostgresException)exception.InnerException!.InnerException!).SqlState);
+        Assert.AreEqual(pass.RemainingVisits, await RemainingVisitsAsync(db, pass.Id));
     }
 
     [TestMethod]
@@ -162,10 +198,13 @@ public class TransactionRunnerTests
         Assert.AreEqual(PostgresErrorCodes.UniqueViolation, ((PostgresException)exception.InnerException!).SqlState);
     }
 
-    private static (TransactionRunner Runner, IUnitOfWork UnitOfWork) CreateRunner(ClubDbContext context)
+    private static (TransactionRunner Runner, IUnitOfWork UnitOfWork) CreateRunner(
+        ClubDbContext context,
+        TimeSpan? lockTimeout = null)
     {
         var unitOfWork = new UnitOfWork(context);
-        var runner = new TransactionRunner(unitOfWork, Options.Create(new TransactionSettings { LockTimeout = LockTimeout }));
+        var settings = new TransactionSettings { LockTimeout = lockTimeout ?? LockTimeout };
+        var runner = new TransactionRunner(unitOfWork, Options.Create(settings));
 
         return (runner, unitOfWork);
     }

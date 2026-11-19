@@ -15,14 +15,26 @@ namespace WebApi.Tests.Contract;
 public class RejectTests
 {
     [TestMethod]
-    public async Task Reject_NoToken_Returns401()
+    [DataRow(null)]
+    [DataRow("Bearer not-a-token")]
+    public async Task Reject_NoValidToken_Returns401WithoutRejectionEventOrCount(string? authorization)
     {
         await using var app = await TestApp.StartAsync();
         using var client = app.CreateClient();
+        using var collector = new MetricCollector<long>(
+            app.Services.GetRequiredService<IMeterFactory>(),
+            "FitnessClub.Api",
+            "club.requests.rejected");
+        if (authorization is not null)
+        {
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", authorization);
+        }
 
         using var response = await client.PostAsync("/probe/reject", null);
 
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.IsFalse(app.Logs.GetSnapshot().Any(x => x.Id.Id == 1001));
+        Assert.AreEqual(0, collector.GetMeasurementSnapshot().Count);
     }
 
     [TestMethod]

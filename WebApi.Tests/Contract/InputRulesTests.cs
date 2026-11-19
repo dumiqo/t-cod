@@ -82,6 +82,77 @@ public class InputRulesTests
     }
 
     [TestMethod]
+    public async Task PostBody_NullSeats_Returns400WithSeatsError()
+    {
+        await using var app = await TestApp.StartAsync();
+        using var client = await app.CreateClientAsync(AuthClient.SeededUser);
+
+        using var response = await client.PostAsync("/probe/body", Json("{\"seats\":null}"));
+
+        await AssertValidationProblemAsync(response, "Seats");
+    }
+
+    [TestMethod]
+    [DataRow("{\"seats\":2.5}")]
+    [DataRow("{\"seats\":2147483648}")]
+    [DataRow("{\"seats\":true}")]
+    public async Task PostBody_SeatsNotInt_Returns400WithSeatsError(string json)
+    {
+        await using var app = await TestApp.StartAsync();
+        using var client = await app.CreateClientAsync(AuthClient.SeededUser);
+
+        using var response = await client.PostAsync("/probe/body", Json(json));
+
+        await AssertValidationProblemAsync(response, "$.seats", "body");
+    }
+
+    [TestMethod]
+    [DataRow("{", "$")]
+    [DataRow("{\"seats\":}", "$.seats")]
+    [DataRow("{\"seats\":2", "$.seats")]
+    [DataRow("not json", "$")]
+    public async Task PostBody_MalformedJson_Returns400WithPathError(string json, string path)
+    {
+        await using var app = await TestApp.StartAsync();
+        using var client = await app.CreateClientAsync(AuthClient.SeededUser);
+
+        using var response = await client.PostAsync("/probe/body", Json(json));
+
+        await AssertValidationProblemAsync(response, path, "body");
+    }
+
+    [TestMethod]
+    public async Task PostBody_EmptyChunkedBodyNoContentType_Returns415()
+    {
+        await using var app = await TestApp.StartAsync();
+        using var client = await app.CreateClientAsync(AuthClient.SeededUser);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/probe/body")
+        {
+            Content = new ByteArrayContent([])
+        };
+        request.Headers.TransferEncodingChunked = true;
+
+        using var response = await client.SendAsync(request);
+
+        Assert.AreEqual(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
+    }
+
+    [TestMethod]
+    [DataRow("5", "5")]
+    [DataRow("-1", "-1")]
+    [DataRow("9223372036854775807", "9223372036854775807")]
+    public async Task GetItem_IdLong_Returns200WithId(string id, string expected)
+    {
+        await using var app = await TestApp.StartAsync();
+        using var client = await app.CreateClientAsync(AuthClient.SeededUser);
+
+        using var response = await client.GetAsync($"/probe/items/{id}");
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.AreEqual(expected, await response.Content.ReadAsStringAsync());
+    }
+
+    [TestMethod]
     public async Task PostBody_ValidBody_Returns200WithSeats()
     {
         await using var app = await TestApp.StartAsync();

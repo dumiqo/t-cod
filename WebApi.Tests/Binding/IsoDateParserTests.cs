@@ -8,6 +8,7 @@ public class IsoDateParserTests
     [TestMethod]
     [DataRow("2026-09-22", 2026, 9, 22)]
     [DataRow("2028-02-29", 2028, 2, 29)]
+    [DataRow("2000-02-29", 2000, 2, 29)]
     [DataRow("0001-01-01", 1, 1, 1)]
     [DataRow("9999-12-31", 9999, 12, 31)]
     public void TryParse_Accepted_ReturnsDate(string text, int year, int month, int day)
@@ -31,6 +32,10 @@ public class IsoDateParserTests
     [DataRow("2026/09/22")]
     [DataRow("20260922")]
     [DataRow("2026-02-29")]
+    [DataRow("1900-02-29")]
+    [DataRow("2026-04-31")]
+    [DataRow("2026-00-10")]
+    [DataRow("2026-09-00")]
     [DataRow("2026-13-01")]
     [DataRow("0000-01-01")]
     [DataRow(" 2026-09-22")]
