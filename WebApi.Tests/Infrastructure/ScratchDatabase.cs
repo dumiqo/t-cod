@@ -41,7 +41,6 @@ public sealed class ScratchDatabase : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        // Npgsql чистит пул только по объекту соединения; это соединение не открывается и ресурсов не держит.
         NpgsqlConnection.ClearPool(new NpgsqlConnection(ConnectionString));
 
         await ExecuteOnServerAsync($"DROP DATABASE IF EXISTS \"{_name}\" WITH (FORCE)");
