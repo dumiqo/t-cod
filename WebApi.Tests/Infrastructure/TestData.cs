@@ -62,6 +62,26 @@ public sealed class TestData
 
         return item.Id;
     }
+
+    public async Task<long> EnrollmentAsync(long userId, long classId, int seats, bool cancelled = false)
+    {
+        var now = _app.Clock.GetUtcNow().UtcDateTime;
+        var enrollment = new Enrollment
+        {
+            UserId = userId,
+            ClassId = classId,
+            Seats = seats,
+            Status = cancelled ? "cancelled" : EnrollmentStatuses.Active,
+            CreatedAt = now,
+            CancelledAt = cancelled ? now : null
+        };
+
+        await using var context = _app.CreateContext();
+        context.Enrollments.Add(enrollment);
+        await context.SaveChangesAsync();
+
+        return enrollment.Id;
+    }
 }
 
 public sealed record TestUser(long Id, string Email);

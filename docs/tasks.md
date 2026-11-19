@@ -590,6 +590,8 @@ JSON-лога проверено на запущенном приложении 
 
 #### 8.1 Контракт и успешная запись
 
+Статус: готово (7d424b2)
+
 - эндпоинт на `ClubApiController`, транзакция через `TransactionRunner`, замок занятия
   `FOR NO KEY UPDATE` с `IgnoreQueryFilters()` — первое чтение в транзакции;
 - `400`: каждая причина из таблицы контракта — `seats` `0` и отрицательный, нет `classId`
@@ -609,6 +611,44 @@ JSON-лога проверено на запущенном приложении 
 - границы: мест впритык и на одно больше; посещений впритык и на одно больше; `startsAt`
   равен текущему моменту и на тик позже; последний день `validUntil` и следующий (UTC);
 - отменённые брони мест не занимают; `seats` до `int.MaxValue` — без переполнения суммы.
+
+Решено при разборе (вопросы и ответы до кода):
+
+- занятые места — `IEnrollmentRepository.SumActiveSeatsAsync(classId)` → `long`:
+  `Where(ClassId, Status == active).SumAsync(x => (long)x.Seats)`, без `e.Class`. Выданный
+  `GetWithEnrollmentsAsync` не используется. `SUM(int)` в Postgres — `bigint`, чтение в `int`
+  при сумме больше `int.MaxValue` дало бы `500`. Тесты репозитория: отменённые и чужие брони
+  не считаются, без броней `0`, две брони по `int.MaxValue` — `4294967294`; заглушка red-фазы
+  возвращает `0L`;
+- проверки — прямо в `EnrollmentService`, без отдельной чистой функции: `class-cancelled`
+  проверяется раньше чтения абонемента, пары с ним ловит только интеграционный тест;
+- порядок: занятие → `404` / `class-cancelled` → абонемент → один `now` → `class-started`
+  (`now >= StartsAt`) → `pass-expired` (`ValidUntil < DateOnly.FromDateTime(now)`) →
+  `pass-exhausted` → сумма мест и `capacity-exceeded` (`occupied + seats > Capacity` в `long`).
+  Тот же `now` — в `createdAt`; пометка `// решение:` у чтения часов — в 8.3;
+- границы времени — переводом часов, а не временем занятия: `starts_at` хранится
+  с точностью до микросекунды, тик в базу не записать. Сравнение с усечённым `now` даёт тот же
+  результат: `startsAt` выровнен по микросекунде;
+- брони, занимающие места, тесты создают `TestData.EnrollmentAsync` напрямую в базе, а не через
+  API (тест хелпера — в `TestDataTests`);
+- тесты — `Enrollments/EnrollRejectionTests.cs`, общие хелперы из `EnrollTests` вынесены
+  в `Enrollments/EnrollApi.cs`;
+- пары — один тест с `DataRow`: 10 пар и строка «все пять» → `class-cancelled`;
+- дополнительно: абонемент кончается сегодня, занятие через месяц — `201`; `seats` больше
+  вместимости на пустом занятии — `capacity-exceeded`; вместимость `int.MaxValue`, занято 1,
+  запрос `int.MaxValue` — `capacity-exceeded`; две активные брони по `int.MaxValue`, запрос 1 —
+  `capacity-exceeded`, не `500`; вместимость 2, занято 3 — `capacity-exceeded`;
+- старт на чистой базе не нужен: схема и старт не меняются.
+
+Найдено при реализации:
+
+- без `(long)` в `SumAsync` EF приводит сумму к `integer` в SQL: две брони по `int.MaxValue`
+  дают `22003 integer out of range`, то есть `500` (проверено поломкой, тест
+  `SumActiveSeatsAsync_TwoMaxSeatEnrollments_DoesNotOverflow`);
+- сложение `occupied + seats` в `int` ловят оба интеграционных теста переполнения (проверено
+  поломкой: `201` вместо `409`);
+- тесты репозитория — `Enrollments/EnrollmentRepositoryTests.cs`; там же тест, что активные брони
+  отменённого занятия считаются: запрос не идёт через `e.Class` и фильтр занятий.
 
 #### 8.3 Конкурентность и часы
 

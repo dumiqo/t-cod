@@ -37,6 +37,14 @@ public sealed class EnrollmentService
             var pass = await _unitOfWork.Pass.GetByUserAsync(userId, token)
                 ?? throw new InvalidOperationException($"User {userId} has no pass.");
 
+            var now = _clock.GetUtcNow().UtcDateTime;
+            var reason = await CheckAsync(item, pass, seats, now, token);
+
+            if (reason is not null)
+            {
+                return TransactionResult.Rollback<EnrollResult>(new EnrollResult.Rejected(reason));
+            }
+
             pass.RemainingVisits -= seats;
 
             var enrollment = await _unitOfWork.Enrollment.CreateAsync(
@@ -46,7 +54,7 @@ public sealed class EnrollmentService
                     ClassId = classId,
                     Seats = seats,
                     Status = EnrollmentStatuses.Active,
-                    CreatedAt = _clock.GetUtcNow().UtcDateTime.TruncateToMicroseconds()
+                    CreatedAt = now.TruncateToMicroseconds()
                 },
                 token);
 
@@ -54,5 +62,27 @@ public sealed class EnrollmentService
 
             return TransactionResult.Commit<EnrollResult>(new EnrollResult.Created(enrollment));
         }, ct);
+    }
+
+    private async Task<string?> CheckAsync(Class item, Pass pass, int seats, DateTime now, CancellationToken ct)
+    {
+        if (now >= item.StartsAt)
+        {
+            return RejectReasons.ClassStarted;
+        }
+
+        if (pass.ValidUntil < DateOnly.FromDateTime(now))
+        {
+            return RejectReasons.PassExpired;
+        }
+
+        if (pass.RemainingVisits < seats)
+        {
+            return RejectReasons.PassExhausted;
+        }
+
+        var occupied = await _unitOfWork.Enrollment.SumActiveSeatsAsync(item.Id, ct);
+
+        return occupied + seats > item.Capacity ? RejectReasons.CapacityExceeded : null;
     }
 }
