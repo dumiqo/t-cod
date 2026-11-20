@@ -28,4 +28,4 @@
 пропускает запросы; `FailFast` и предел вызова `Redis:OperationTimeout` (1 секунда); отказ —
 только недоступность и тайм-аут, остальное — `500`; старт без Redis (`AbortOnConnectFail = false`);
 готовность остаётся `Degraded`; событие 1004 Warning и `club.redis.failures` с тегом
-`operation`. Реализация — в 26.2, лимит — в 28.2.
+`operation`. Реализация — в 26.4, лимит — в 28.2.
