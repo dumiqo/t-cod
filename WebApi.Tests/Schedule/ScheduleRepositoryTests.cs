@@ -2,6 +2,7 @@ using DataAccessLayer;
 using DataAccessLayer.Entities;
 using DataAccessLayer.Repositories;
 using DataAccessLayer.UnitOfWork;
+using Microsoft.EntityFrameworkCore;
 using WebApi.Tests.Infrastructure;
 
 namespace WebApi.Tests.Schedule;
@@ -24,7 +25,7 @@ public class ScheduleRepositoryTests
         var atFrom = await ClassAsync(context, room, from);
         await ClassAsync(context, room, from.AddTicks(-10));
 
-        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, to, null, 10));
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, to, null, 10), 0);
 
         CollectionAssert.AreEqual(
             new[] { atFrom.Id, sameFirst.Id, sameSecond.Id, late.Id },
@@ -40,10 +41,10 @@ public class ScheduleRepositoryTests
         var room = await RoomAsync(context, "Pool");
         var item = await ClassAsync(context, room, from.AddTicks(1234560), title: "Swim", durationMinutes: 45, capacity: 7);
 
-        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), null, 10));
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), null, 10), 0);
 
         Assert.AreEqual(1, rows.Count);
-        Assert.AreEqual(new ScheduleRow(item.Id, "Swim", from.AddTicks(1234560), 45, 7, room.Id, "Pool"), rows[0]);
+        Assert.AreEqual(new ScheduleRow(item.Id, "Swim", from.AddTicks(1234560), 45, 7, room.Id, "Pool", 0, 0), rows[0]);
     }
 
     [TestMethod]
@@ -56,7 +57,7 @@ public class ScheduleRepositoryTests
         await ClassAsync(context, room, from.AddHours(1), cancelled: true);
         var active = await ClassAsync(context, room, from.AddHours(2));
 
-        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), null, 10));
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), null, 10), 0);
 
         CollectionAssert.AreEqual(new[] { active.Id }, rows.Select(x => x.Id).ToArray());
     }
@@ -72,7 +73,7 @@ public class ScheduleRepositoryTests
         var inHall = await ClassAsync(context, hall, from.AddHours(1));
         await ClassAsync(context, pool, from.AddHours(2));
 
-        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), hall.Id, 10));
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), hall.Id, 10), 0);
 
         CollectionAssert.AreEqual(new[] { inHall.Id }, rows.Select(x => x.Id).ToArray());
     }
@@ -90,11 +91,52 @@ public class ScheduleRepositoryTests
         var first = await ClassAsync(context, room, from.AddHours(1));
         var second = await ClassAsync(context, room, from.AddHours(2));
 
-        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), null, take));
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), null, take), 0);
 
         CollectionAssert.AreEqual(
             new[] { first.Id, second.Id, third.Id }.Take(take).ToArray(),
             rows.Select(x => x.Id).ToArray());
+    }
+
+    [TestMethod]
+    public async Task GetSchedulePageAsync_Sums_CountActiveSeatsOfClassAndOfUserInLong()
+    {
+        await using var db = await TestDb.CloneAsync();
+        var from = db.SeededAt.UtcDateTime.Date.AddDays(400);
+        await using var context = db.CreateContext();
+        var users = await context.Users.OrderBy(x => x.Id).Select(x => x.Id).Take(2).ToListAsync();
+        var room = await RoomAsync(context, "Hall");
+        var item = await ClassAsync(context, room, from.AddHours(1));
+        var empty = await ClassAsync(context, room, from.AddHours(2));
+        context.Enrollments.AddRange(
+            Enrollment(users[0], item.Id, int.MaxValue),
+            Enrollment(users[0], item.Id, int.MaxValue),
+            Enrollment(users[1], item.Id, 5),
+            Enrollment(users[0], item.Id, 7, cancelled: true),
+            Enrollment(users[1], item.Id, 9, cancelled: true));
+        await context.SaveChangesAsync();
+
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), null, 10), users[0]);
+
+        CollectionAssert.AreEqual(
+            new[] { (item.Id, 2L * int.MaxValue + 5, 2L * int.MaxValue), (empty.Id, 0L, 0L) },
+            rows.Select(x => (x.Id, x.TakenSeats, x.MySeats)).ToArray());
+    }
+
+    private static readonly DateTime CreatedAt = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    private static Enrollment Enrollment(long userId, long classId, int seats, bool cancelled = false)
+    {
+        return new Enrollment
+        {
+            UserId = userId,
+            ClassId = classId,
+            Seats = seats,
+            Status = cancelled ? "cancelled" : EnrollmentStatuses.Active,
+            CreatedAt = CreatedAt,
+            CancelledAt = cancelled ? CreatedAt : null,
+            RefundedVisits = cancelled ? seats : null
+        };
     }
 
     private static async Task<Room> RoomAsync(ClubDbContext context, string name)

@@ -29,7 +29,9 @@ public static class ScheduleApi
         string roomName,
         string title = "Test class",
         int durationMinutes = 60,
-        int capacity = 10)
+        int capacity = 10,
+        int? freeSeats = null,
+        int mySeats = 0)
     {
         return new
         {
@@ -39,8 +41,8 @@ public static class ScheduleApi
             durationMinutes,
             room = new { id = roomId, name = roomName },
             capacity,
-            freeSeats = capacity,
-            mySeats = 0
+            freeSeats = freeSeats ?? capacity,
+            mySeats
         };
     }
 

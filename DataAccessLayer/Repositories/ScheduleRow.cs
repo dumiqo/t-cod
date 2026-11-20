@@ -7,4 +7,6 @@ public sealed record ScheduleRow(
     int DurationMinutes,
     int Capacity,
     long RoomId,
-    string RoomName);
+    string RoomName,
+    long TakenSeats,
+    long MySeats);

@@ -25,7 +25,7 @@ public class ScheduleController : ClubApiController, IActionFilter
         [Range(1, 100)] int? limit,
         CancellationToken ct)
     {
-        return _schedule.GetPageAsync(from, to, roomId, limit ?? 20, ct);
+        return _schedule.GetPageAsync(from, to, roomId, limit ?? 20, CurrentUserId, ct);
     }
 
     // решение: to > from проверяется здесь, до автоматического 400 от [ApiController], по сырым значениям

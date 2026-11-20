@@ -26,7 +26,7 @@ public class ClassRepository : GenericRepository<Class>, IClassRepository
             .SingleOrDefaultAsync(ct);
     }
 
-    public async Task<List<ScheduleRow>> GetSchedulePageAsync(ScheduleQuery query, CancellationToken ct = default)
+    public async Task<List<ScheduleRow>> GetSchedulePageAsync(ScheduleQuery query, long userId, CancellationToken ct = default)
     {
         var classes = _dbSet.Where(x => x.StartsAt >= query.From && x.StartsAt < query.To);
 
@@ -40,7 +40,10 @@ public class ClassRepository : GenericRepository<Class>, IClassRepository
             // решение: id — второй ключ: контракт не задаёт порядок внутри одного startsAt, а курсору нужен однозначный.
             .ThenBy(x => x.Id)
             .Take(query.Take)
-            .Select(x => new ScheduleRow(x.Id, x.Title, x.StartsAt, x.DurationMinutes, x.Capacity, x.RoomId, x.Room.Name))
+            .Select(x => new ScheduleRow(x.Id, x.Title, x.StartsAt, x.DurationMinutes, x.Capacity, x.RoomId,
+                x.Room.Name,
+                x.Enrollments.Where(e => e.Status == EnrollmentStatuses.Active).Sum(e => (long)e.Seats),
+                x.Enrollments.Where(e => e.Status == EnrollmentStatuses.Active && e.UserId == userId).Sum(e => (long)e.Seats)))
             .ToListAsync(ct);
     }
 }
