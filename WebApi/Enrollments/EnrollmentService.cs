@@ -5,6 +5,7 @@ using DataAccessLayer.UnitOfWork;
 using WebApi.Idempotency;
 using WebApi.Observability;
 using WebApi.Time;
+using WebApi.Waitlist;
 
 namespace WebApi.Enrollments;
 
@@ -87,7 +88,10 @@ public sealed class EnrollmentService
                 return TransactionResult.Rollback(Repeat(enrollment));
             }
 
-            var pass = await _unitOfWork.Pass.LockByUserAsync(userId, token)
+            // решение: на отменённом клубом занятии очередь не продвигается и не читается (задача 21).
+            var queue = item.IsCancelled ? [] : await _unitOfWork.Waitlist.GetWaitingAsync(item.Id, token);
+            var passes = await _unitOfWork.Pass.LockByUsersAsync([userId, .. queue.Select(x => x.UserId)], token);
+            var pass = passes.SingleOrDefault(x => x.UserId == userId)
                 ?? throw new InvalidOperationException($"User {userId} has no pass.");
 
             var now = _clock.GetUtcNow().UtcDateTime;
@@ -109,6 +113,7 @@ public sealed class EnrollmentService
             pass.RemainingVisits += refundedVisits;
 
             await _unitOfWork.SaveChangesAsync(token);
+            await PromoteAsync(item, queue, passes, userId, now, token);
 
             return TransactionResult.Commit<CancelResult>(
                 new CancelResult.Cancelled(enrollment.Id, item.Id, enrollment.Seats, refundedVisits, pass.RemainingVisits, false));
@@ -214,6 +219,40 @@ public sealed class EnrollmentService
         }
 
         return result;
+    }
+
+    private async Task PromoteAsync(Class item, List<WaitlistEntry> queue, List<Pass> passes, long userId, DateTime now, CancellationToken ct)
+    {
+        if (queue.Count == 0)
+        {
+            return;
+        }
+
+        var freeSeats = item.Capacity - await _unitOfWork.Enrollment.SumActiveSeatsAsync(item.Id, ct);
+        var passesByUser = passes.ToDictionary(x => x.UserId);
+        var steps = WaitlistPromotion.Plan(freeSeats, queue, passesByUser, userId, DateOnly.FromDateTime(now));
+
+        foreach (var step in steps.Where(x => x.SkipReason is null))
+        {
+            var entry = step.Entry;
+            entry.Status = WaitlistStatuses.Promoted;
+            passesByUser[entry.UserId].RemainingVisits -= entry.Seats;
+
+            // решение: бронь продвинутого — с id его записи в очереди (задача 18).
+            await _unitOfWork.Enrollment.CreateAsync(
+                new Enrollment
+                {
+                    Id = entry.Id,
+                    UserId = entry.UserId,
+                    ClassId = item.Id,
+                    Seats = entry.Seats,
+                    Status = EnrollmentStatuses.Active,
+                    CreatedAt = now.TruncateToMicroseconds()
+                },
+                ct);
+        }
+
+        await _unitOfWork.SaveChangesAsync(ct);
     }
 
     private static CancelResult Repeat(Enrollment enrollment)

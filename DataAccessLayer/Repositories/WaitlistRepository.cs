@@ -28,4 +28,12 @@ public class WaitlistRepository : GenericRepository<WaitlistEntry>, IWaitlistRep
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
     }
+
+    public async Task<List<WaitlistEntry>> GetWaitingAsync(long classId, CancellationToken ct = default)
+    {
+        return await _dbSet
+            .Where(x => x.ClassId == classId && x.Status == WaitlistStatuses.Waiting)
+            .OrderBy(x => x.Id)
+            .ToListAsync(ct);
+    }
 }

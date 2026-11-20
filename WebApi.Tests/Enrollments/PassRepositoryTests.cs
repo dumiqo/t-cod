@@ -51,4 +51,36 @@ public class PassRepositoryTests
             HeldLock.AcquireAsync(db.ConnectionString, $"SELECT 1 FROM passes WHERE id = {pass.Id} FOR KEY SHARE NOWAIT"));
         Assert.AreEqual("55P03", exception.SqlState);
     }
+
+    [TestMethod]
+    public async Task LockByUsersAsync_SomeUsers_ReturnsTheirPassesOrderedById()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var passes = await context.Passes.AsNoTracking().OrderBy(x => x.Id).Take(3).ToListAsync();
+
+        var found = await new UnitOfWork(context).Pass.LockByUsersAsync([passes[2].UserId, 999999999L, passes[0].UserId, passes[2].UserId]);
+
+        CollectionAssert.AreEqual(
+            new[] { $"{passes[0].Id}|{passes[0].UserId}", $"{passes[2].Id}|{passes[2].UserId}" },
+            found.Select(x => $"{x.Id}|{x.UserId}").ToArray());
+    }
+
+    [TestMethod]
+    public async Task LockByUsersAsync_InTransaction_OtherSessionCannotEvenKeyShareLockAnyOfPasses()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var passes = await context.Passes.AsNoTracking().OrderBy(x => x.Id).Take(2).ToListAsync();
+        await using var transaction = await context.Database.BeginTransactionAsync();
+
+        await new UnitOfWork(context).Pass.LockByUsersAsync([passes[0].UserId, passes[1].UserId]);
+
+        foreach (var pass in passes)
+        {
+            var exception = await Assert.ThrowsExceptionAsync<PostgresException>(() =>
+                HeldLock.AcquireAsync(db.ConnectionString, $"SELECT 1 FROM passes WHERE id = {pass.Id} FOR KEY SHARE NOWAIT"));
+            Assert.AreEqual("55P03", exception.SqlState);
+        }
+    }
 }

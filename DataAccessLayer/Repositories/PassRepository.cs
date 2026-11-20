@@ -22,4 +22,12 @@ public class PassRepository : GenericRepository<Pass>, IPassRepository
             .FromSql($"SELECT * FROM passes WHERE user_id = {userId} FOR UPDATE")
             .SingleOrDefaultAsync(ct);
     }
+
+    public async Task<List<Pass>> LockByUsersAsync(long[] userIds, CancellationToken ct = default)
+    {
+        // решение: все абонементы одним запросом по id (задача 23): отдельные замки крест-накрест дают взаимоблокировку.
+        return await _dbSet
+            .FromSql($"SELECT * FROM passes WHERE user_id = ANY({userIds}) ORDER BY id FOR UPDATE")
+            .ToListAsync(ct);
+    }
 }

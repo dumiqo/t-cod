@@ -126,6 +126,26 @@ public class WaitlistRepositoryTests
         Assert.IsNull(await waitlist.FindOwnedAsync(id + 1000000, otherUserId));
     }
 
+    [TestMethod]
+    public async Task GetWaitingAsync_MixedEntries_ReturnsTrackedWaitingOfClassOrderedById()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var classId = await FirstClassAsync(context);
+        var otherId = await context.Classes.Where(x => x.Id > classId).OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();
+        var first = await AddAsync(context, classId, 0, "waiting");
+        await AddAsync(context, classId, 1, "cancelled");
+        await AddAsync(context, otherId, 2, "waiting");
+        await AddAsync(context, classId, 3, "promoted");
+        var second = await AddAsync(context, classId, 4, "waiting");
+        context.ChangeTracker.Clear();
+
+        var entries = await new UnitOfWork(context).Waitlist.GetWaitingAsync(classId);
+
+        CollectionAssert.AreEqual(new[] { first, second }, entries.Select(x => x.Id).ToArray());
+        Assert.AreEqual(2, context.ChangeTracker.Entries<WaitlistEntry>().Count());
+    }
+
     private static Task<long> UserIdAsync(ClubDbContext context, int userIndex)
     {
         return context.Users.OrderBy(x => x.Id).Skip(userIndex).Select(x => x.Id).FirstAsync();
