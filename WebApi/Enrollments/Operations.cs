@@ -7,4 +7,6 @@ public static class Operations
     public const string CancelEnrollment = "cancel-enrollment";
 
     public const string ChangeSeats = "change-seats";
+
+    public const string JoinWaitlist = "join-waitlist";
 }
