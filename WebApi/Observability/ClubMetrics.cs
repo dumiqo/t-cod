@@ -14,6 +14,7 @@ public sealed class ClubMetrics
     private readonly Counter<long> _waitlistJoined;
     private readonly Counter<long> _waitlistLeft;
     private readonly Counter<long> _waitlistPromoted;
+    private readonly Counter<long> _redisFailures;
 
     public ClubMetrics(IMeterFactory meterFactory)
     {
@@ -27,6 +28,12 @@ public sealed class ClubMetrics
         _waitlistJoined = meter.CreateCounter<long>("club.waitlist.joined");
         _waitlistLeft = meter.CreateCounter<long>("club.waitlist.left");
         _waitlistPromoted = meter.CreateCounter<long>("club.waitlist.promoted");
+        _redisFailures = meter.CreateCounter<long>("club.redis.failures");
+    }
+
+    public void RedisFailed(string operation)
+    {
+        _redisFailures.Add(1, new KeyValuePair<string, object?>("operation", operation));
     }
 
     public void WaitlistPromoted(int seats)

@@ -21,7 +21,8 @@ public sealed class TestApp : IAsyncDisposable
         "club.idempotency.replayed",
         "club.waitlist.joined",
         "club.waitlist.left",
-        "club.waitlist.promoted"
+        "club.waitlist.promoted",
+        "club.redis.failures"
     ];
 
     private readonly TestDb _db;
@@ -82,6 +83,16 @@ public sealed class TestApp : IAsyncDisposable
         }
 
         return new TestApp(db, factory, clock, redisKeyPrefix);
+    }
+
+    public void BreakRedis()
+    {
+        KeyPrefixedConnection.Of(Services.GetRequiredService<IConnectionMultiplexer>()).Break();
+    }
+
+    public void RestoreRedis()
+    {
+        KeyPrefixedConnection.Of(Services.GetRequiredService<IConnectionMultiplexer>()).Restore();
     }
 
     public HttpClient CreateClient()

@@ -18,6 +18,7 @@ using WebApi.Enrollments;
 using WebApi.Filters;
 using WebApi.Middleware;
 using WebApi.Observability;
+using WebApi.Redis;
 using WebApi.Schedule;
 using WebApi.Waitlist;
 
@@ -55,8 +56,15 @@ builder.Services.AddOptions<TransactionSettings>()
         "Transactions:LockTimeout must be at least 1 ms and less than 30 s.")
     .ValidateOnStart();
 
-builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
-    ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
+builder.Services.AddSingleton(_ => RedisConnection.Connect(builder.Configuration.GetConnectionString("Redis")!));
+// решение: предел вызова Redis меньше 5 с — иначе раньше него сработает AsyncTimeout клиента.
+builder.Services.AddOptions<RedisSettings>()
+    .BindConfiguration(RedisSettings.Section)
+    .Validate(
+        x => x.OperationTimeout >= TimeSpan.FromMilliseconds(1) && x.OperationTimeout < TimeSpan.FromSeconds(5),
+        "Redis:OperationTimeout must be at least 1 ms and less than 5 s.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<RedisGuard>();
 
 builder.Services.AddOptions<CardCacheSettings>()
     .BindConfiguration(CardCacheSettings.Section)
@@ -110,7 +118,7 @@ app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = _ => false }
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = x => x.Tags.Contains(ReadinessChecks.Tag) })
     .AllowAnonymous();
 
-app.Services.GetRequiredService<IConnectionMultiplexer>();
+app.Services.GetRequiredService<RedisGuard>().ReportStart(app.Services.GetRequiredService<IConnectionMultiplexer>());
 
 using (var scope = app.Services.CreateScope())
 {

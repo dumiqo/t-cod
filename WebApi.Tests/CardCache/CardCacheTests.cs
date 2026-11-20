@@ -486,16 +486,16 @@ public class CardCacheTests
 
     private sealed class GatedCardCache(ICardCache inner, FillGate gate) : ICardCache
     {
-        public Task<EnrollmentCard?> GetAsync(long userId, long id)
+        public Task<(bool Available, EnrollmentCard? Card)> GetAsync(long userId, long id, CancellationToken ct)
         {
-            return inner.GetAsync(userId, id);
+            return inner.GetAsync(userId, id, ct);
         }
 
-        public async Task FillAsync(long userId, VersionedCard card)
+        public async Task FillAsync(long userId, VersionedCard card, CancellationToken ct)
         {
             gate.Entered.TrySetResult();
             await gate.Release.Task;
-            await inner.FillAsync(userId, card);
+            await inner.FillAsync(userId, card, ct);
         }
 
         public Task InvalidateAsync(long userId, long version)

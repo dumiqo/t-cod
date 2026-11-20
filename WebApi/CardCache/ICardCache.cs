@@ -4,9 +4,9 @@ namespace WebApi.CardCache;
 
 public interface ICardCache
 {
-    Task<EnrollmentCard?> GetAsync(long userId, long id);
+    Task<(bool Available, EnrollmentCard? Card)> GetAsync(long userId, long id, CancellationToken ct);
 
-    Task FillAsync(long userId, VersionedCard card);
+    Task FillAsync(long userId, VersionedCard card, CancellationToken ct);
 
     Task InvalidateAsync(long userId, long version);
 }

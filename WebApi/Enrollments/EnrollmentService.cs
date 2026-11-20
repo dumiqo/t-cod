@@ -61,7 +61,7 @@ public sealed class EnrollmentService
 
     public async Task<EnrollmentCard?> GetCardAsync(long userId, long id, CancellationToken ct)
     {
-        var cached = await _cache.GetAsync(userId, id);
+        var (available, cached) = await _cache.GetAsync(userId, id, ct);
 
         if (cached is not null)
         {
@@ -75,7 +75,10 @@ public sealed class EnrollmentService
             return null;
         }
 
-        await _cache.FillAsync(userId, versioned);
+        if (available)
+        {
+            await _cache.FillAsync(userId, versioned, ct);
+        }
 
         return versioned.Card;
     }

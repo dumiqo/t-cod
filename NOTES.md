@@ -713,7 +713,7 @@ Redis вспомогательный: его отказ не роняет ни �
   в фоне. Без этого выданный код не стартует без Redis, хотя без Redis всё работает.
 - Готовность: `/health/ready` при недоступном Redis — `Degraded` (`200`), экземпляр с балансировки
   не снимается: без Redis он отвечает на все запросы.
-- Событие 1004 на Warning на каждый отказ, с исключением и тегом `operation`: `connect` (старт
+- Событие 1005 на Warning на каждый отказ, с исключением и тегом `operation`: `connect` (старт
   без Redis), `cache-get`, `cache-set`, `cache-remove`, `rate-limit`. Счётчик
   `club.redis.failures` с тем же тегом. `club.requests.rejected` не трогаем — запрос
   не отклонён. Писать только смену состояния (`ConnectionFailed` / `ConnectionRestored`

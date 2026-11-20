@@ -39,7 +39,10 @@ Postgres is on host port 5433 and Redis on 6380 (not the defaults). Tests honour
   `Rollback` do not `SaveChanges` in the same scope — tracked changes are still there.
 - `WebApi` — `/health` (liveness, runs no checks) and `/health/ready` (Postgres and Redis checks
   in `Observability/`, JSON console logs). Everything is wired in `Program.cs`: on startup it migrates, seeds and connects to Redis
-  eagerly (no Redis → no start). JWT validation with `ClockSkew = Zero`. `ExceptionHandlingMiddleware`
+  eagerly via `Redis/RedisConnection` (`AbortOnConnectFail = false`, `FailFast`: starts without Redis,
+  event 1005 `connect`). Redis calls go through `Redis/RedisGuard.TryAsync` (`Redis:OperationTimeout`,
+  only unavailability/timeout is a failure → event 1005 + `club.redis.failures`, caller falls back to
+  the DB). JWT validation with `ClockSkew = Zero`. `ExceptionHandlingMiddleware`
   turns any unhandled exception (including DB conflicts) into a 500 ProblemDetails. Controllers
   derive from `BaseApiController` (`CurrentUserId`, `IsAdmin`); our endpoints derive from
   `ClubApiController` (`[Authorize]`, `Reject(operation, reason)` → 409 with `reason`, event 1001 and
@@ -61,6 +64,9 @@ Postgres is on host port 5433 and Redis on 6380 (not the defaults). Tests honour
     run and dropped in `TestDatabase.CleanupAsync`; a clone is dropped on dispose.
   - `HeldLock.AcquireAsync(connectionString, sql)` — a test's own connection holding row locks;
     `WaitForBlockedAsync(n)` waits until n sessions queue behind it (`pg_blocking_pids` chain).
+  - Redis failures: `app.BreakRedis()` / `app.RestoreRedis()` (the app's connection switches to a
+    closed port), `KeyPrefixedConnection.ClosedEndpoint()` for "down from start",
+    `FreezableRedisProxy` (`Freeze()`) for a hung Redis.
   - Given code, kept for `Existing/`: `TestDatabase` (`club_tests_<guid>`, flushes Redis DB 1),
     `ApiHost` (ONE shared factory, server started under its lock), `ScratchDatabase`, `AuthClient`.
 

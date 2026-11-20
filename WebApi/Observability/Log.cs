@@ -29,6 +29,13 @@ public static partial class Log
     public static partial void IdempotentReplay(ILogger logger, string operation, long resultId, long classId, long userId);
 
     [LoggerMessage(
+        EventId = 1005,
+        EventName = "RedisFailure",
+        Level = LogLevel.Warning,
+        Message = "Redis failure: {Operation}, {Reason}")]
+    public static partial void RedisFailure(ILogger logger, Exception? exception, string operation, string reason);
+
+    [LoggerMessage(
         EventId = 2001,
         EventName = "EnrollmentCreated",
         Level = LogLevel.Information,
