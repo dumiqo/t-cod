@@ -1,9 +1,13 @@
 using System.Net;
 using System.Text.Json.Nodes;
+using DataAccessLayer.Repositories;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
+using WebApi.CardCache;
 using WebApi.Tests.Infrastructure;
 using static WebApi.Tests.Enrollments.CancelApi;
 using static WebApi.Tests.Enrollments.ChangeSeatsApi;
@@ -15,6 +19,8 @@ namespace WebApi.Tests.CardCache;
 [TestClass]
 public class CardCacheTests
 {
+    private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);
+
     [TestMethod]
     public async Task ScriptEvaluate_PrefixedConnection_PrefixesKeys()
     {
@@ -362,6 +368,68 @@ public class CardCacheTests
         StringAssert.Contains(exception.Message, "Cache:CardTtl");
     }
 
+    [TestMethod]
+    public async Task GetCard_FillDelayedPastCancel_FillWritesNothingAndNextCardIsCancelled()
+    {
+        var gate = new FillGate();
+        await using var app = await StartGatedAsync(gate);
+        var user = await app.Data.UserAsync();
+        var id = await app.Data.EnrollmentAsync(user.Id, await app.Data.ClassAsync(), 2);
+        using var client = await app.CreateClientAsync(user.Email);
+
+        var read = CardAsync(client, id);
+        await gate.Entered.Task.WaitAsync(Wait);
+        using (var cancel = await CancelAsync(client, id))
+        {
+            await AssertCancelledAsync(cancel, id, 2);
+        }
+
+        await AssertTombstoneAsync(app, user, "1");
+        gate.Release.SetResult();
+
+        Assert.AreEqual("active", (string)(await read.WaitAsync(Wait))["status"]!);
+        await AssertTombstoneAsync(app, user, "1");
+        var card = await CardAsync(client, id);
+        Assert.AreEqual("cancelled", (string)card["status"]!);
+        Assert.AreEqual(12, (int)card["pass"]!["remainingVisits"]!);
+    }
+
+    [TestMethod]
+    public async Task GetCard_FillDelayedPastPromotion_FillWritesNothingAndNextCardSeesRemaining()
+    {
+        var gate = new FillGate();
+        await using var app = await StartGatedAsync(gate);
+        var owner = await app.Data.UserAsync();
+        var waiter = await app.Data.UserAsync();
+        var classId = await app.Data.ClassAsync(capacity: 2);
+        var id = await app.Data.EnrollmentAsync(owner.Id, classId, 2);
+        await EntryAsync(app, waiter.Id, classId, 2);
+        var waiterOther = await app.Data.EnrollmentAsync(waiter.Id, await app.Data.ClassAsync(), 1);
+        using var client = await app.CreateClientAsync(owner.Email);
+        using var waiterClient = await app.CreateClientAsync(waiter.Email);
+
+        var read = CardAsync(waiterClient, waiterOther);
+        await gate.Entered.Task.WaitAsync(Wait);
+        using (var cancel = await CancelAsync(client, id))
+        {
+            await AssertCancelledAsync(cancel, id, 2);
+        }
+
+        await AssertTombstoneAsync(app, waiter, "1");
+        gate.Release.SetResult();
+
+        Assert.AreEqual(10, (int)(await read.WaitAsync(Wait))["pass"]!["remainingVisits"]!);
+        await AssertTombstoneAsync(app, waiter, "1");
+        Assert.AreEqual(8, await RemainingAsync(waiterClient, waiterOther));
+    }
+
+    private static Task<TestApp> StartGatedAsync(FillGate gate)
+    {
+        return TestApp.StartAsync(builder => builder.ConfigureTestServices(services =>
+            services.AddSingleton<ICardCache>(provider =>
+                new GatedCardCache(ActivatorUtilities.CreateInstance<WebApi.CardCache.CardCache>(provider), gate))));
+    }
+
     private static string Key(TestUser user)
     {
         return $"card:{user.Id}";
@@ -372,6 +440,14 @@ public class CardCacheTests
         var entries = await app.Redis.HashGetAllAsync(Key(user));
 
         return entries.ToDictionary(x => (string)x.Name!, x => (string)x.Value!);
+    }
+
+    private static async Task AssertTombstoneAsync(TestApp app, TestUser user, string version)
+    {
+        var hash = await HashAsync(app, user);
+
+        CollectionAssert.AreEquivalent(new[] { "v" }, hash.Keys.ToArray(), string.Join(", ", hash));
+        Assert.AreEqual(version, hash["v"]);
     }
 
     private static async Task AssertTtlAsync(TestApp app, TestUser user, TimeSpan setting)
@@ -399,5 +475,32 @@ public class CardCacheTests
     private static async Task<int> RemainingAsync(HttpClient client, long id)
     {
         return (int)(await CardAsync(client, id))["pass"]!["remainingVisits"]!;
+    }
+
+    private sealed class FillGate
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    private sealed class GatedCardCache(ICardCache inner, FillGate gate) : ICardCache
+    {
+        public Task<EnrollmentCard?> GetAsync(long userId, long id)
+        {
+            return inner.GetAsync(userId, id);
+        }
+
+        public async Task FillAsync(long userId, VersionedCard card)
+        {
+            gate.Entered.TrySetResult();
+            await gate.Release.Task;
+            await inner.FillAsync(userId, card);
+        }
+
+        public Task InvalidateAsync(long userId, long version)
+        {
+            return inner.InvalidateAsync(userId, version);
+        }
     }
 }
