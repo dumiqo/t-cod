@@ -110,7 +110,7 @@
   - [23.3 Гонки и взаимоблокировка](tasks/23.3-promotion-races.md) — готово (a7c6cad)
   - [23.4 Наблюдаемость](tasks/23.4-promotion-observability.md) — готово (d17b39d)
 - [24. Исследование: отказ Redis](tasks/24-redis-failure.md) — готово (41a4819)
-- [25. Исследование: кэш карточки](tasks/25-card-cache-research.md)
+- [25. Исследование: кэш карточки](tasks/25-card-cache-research.md) — готово (01e01bf)
 - [26. Кэш карточки](tasks/26-card-cache.md)
   - [26.1 Кэш и сброс](tasks/26.1-card-cache-invalidation.md)
   - [26.2 Кэш при отказе Redis](tasks/26.2-card-cache-redis-failure.md)
