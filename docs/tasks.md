@@ -122,7 +122,7 @@
   - [28.2 Ограничение при отказе Redis](tasks/28.2-rate-limit-redis-failure.md) — готово (cc69004)
 - [29. Проверка по контракту](tasks/29-contract-check.md)
   - [29.1 Контрактная матрица](tasks/29.1-contract-matrix.md) — готово (5025406)
-  - [29.2 Сценарии на сидах](tasks/29.2-seed-scenarios.md) — проработано
+  - [29.2 Сценарии на сидах](tasks/29.2-seed-scenarios.md) — готово (c35ff6d)
   - [29.3 Инварианты под смешанной нагрузкой](tasks/29.3-mixed-load-invariants.md) — проработано
   - [29.4 Нагрузочный прогон с Redis и без](tasks/29.4-load-run.md) — проработано
   - [29.5 Отказные режимы](tasks/29.5-failure-modes.md) — проработано
