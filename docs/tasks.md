@@ -95,13 +95,13 @@
   - 17.3 Индексы и план — готово (6e275f2)
 - [18. Исследование: номер брони после продвижения](tasks/18-promoted-enrollment-id.md) — готово (bbf98ea)
 - [19. Исследование: прочее по очереди](tasks/19-waitlist-misc.md) — готово (d5dbf81)
-- [20. Встать в очередь и уйти (§7, §8)](tasks/20-waitlist-join-leave.md)
-  - [20.1 Таблица очереди и постановка (§7)](tasks/20.1-waitlist-table-join.md)
-  - [20.2 Причины 409 §7 и границы](tasks/20.2-join-conflicts.md)
-  - [20.3 Уход из очереди (§8)](tasks/20.3-leave-waitlist.md)
-  - [20.4 Идемпотентность §7](tasks/20.4-join-idempotency.md)
-  - [20.5 Конкурентность и часы](tasks/20.5-waitlist-concurrency.md)
-  - [20.6 Наблюдаемость](tasks/20.6-waitlist-observability.md)
+- [20. Встать в очередь и уйти (§7, §8)](tasks/20-waitlist-join-leave.md) — проработано
+  - [20.1 Таблица очереди и постановка (§7)](tasks/20.1-waitlist-table-join.md) — проработано
+  - [20.2 Причины 409 §7 и границы](tasks/20.2-join-conflicts.md) — проработано
+  - [20.3 Уход из очереди (§8)](tasks/20.3-leave-waitlist.md) — проработано
+  - [20.4 Идемпотентность §7](tasks/20.4-join-idempotency.md) — проработано
+  - [20.5 Конкурентность и часы](tasks/20.5-waitlist-concurrency.md) — проработано
+  - [20.6 Наблюдаемость](tasks/20.6-waitlist-observability.md) — проработано
 - [21. Исследование: порядок продвижения](tasks/21-promotion-order.md)
 - [22. Исследование: самопродвижение](tasks/22-self-promotion.md)
 - [23. Продвижение очереди](tasks/23-waitlist-promotion.md)
