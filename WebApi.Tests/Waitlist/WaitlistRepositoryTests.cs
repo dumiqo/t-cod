@@ -92,6 +92,40 @@ public class WaitlistRepositoryTests
         Assert.IsFalse(await new UnitOfWork(context).Waitlist.IsWaitingAsync(classId, userId));
     }
 
+    [TestMethod]
+    public async Task FindOwnedAsync_OwnEntryOnCancelledClass_ReturnsUntrackedEntry()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var classId = await FirstClassAsync(context);
+        await context.Classes.IgnoreQueryFilters().Where(x => x.Id == classId).ExecuteUpdateAsync(x => x.SetProperty(c => c.IsCancelled, true));
+        var userId = await UserIdAsync(context, 0);
+        var id = await AddAsync(context, classId, 0, "promoted");
+        context.ChangeTracker.Clear();
+
+        var entry = await new UnitOfWork(context).Waitlist.FindOwnedAsync(id, userId);
+
+        Assert.IsNotNull(entry);
+        Assert.AreEqual(id, entry.Id);
+        Assert.AreEqual(classId, entry.ClassId);
+        Assert.AreEqual("promoted", entry.Status);
+        Assert.AreEqual(0, context.ChangeTracker.Entries().Count());
+    }
+
+    [TestMethod]
+    public async Task FindOwnedAsync_MissingAndOthers_ReturnsNull()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var classId = await FirstClassAsync(context);
+        var otherUserId = await UserIdAsync(context, 1);
+        var id = await AddAsync(context, classId, 0, "waiting");
+        var waitlist = new UnitOfWork(context).Waitlist;
+
+        Assert.IsNull(await waitlist.FindOwnedAsync(id, otherUserId));
+        Assert.IsNull(await waitlist.FindOwnedAsync(id + 1000000, otherUserId));
+    }
+
     private static Task<long> UserIdAsync(ClubDbContext context, int userIndex)
     {
         return context.Users.OrderBy(x => x.Id).Skip(userIndex).Select(x => x.Id).FirstAsync();

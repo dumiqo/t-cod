@@ -9,4 +9,6 @@ public static class Operations
     public const string ChangeSeats = "change-seats";
 
     public const string JoinWaitlist = "join-waitlist";
+
+    public const string LeaveWaitlist = "leave-waitlist";
 }

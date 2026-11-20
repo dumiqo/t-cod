@@ -19,4 +19,6 @@ public static class RejectReasons
     public const string AlreadyWaiting = "already-waiting";
 
     public const string SeatsAvailable = "seats-available";
+
+    public const string AlreadyPromoted = "already-promoted";
 }

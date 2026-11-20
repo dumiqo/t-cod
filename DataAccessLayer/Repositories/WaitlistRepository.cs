@@ -21,4 +21,11 @@ public class WaitlistRepository : GenericRepository<WaitlistEntry>, IWaitlistRep
     {
         return await _dbSet.AnyAsync(x => x.ClassId == classId && x.UserId == userId && x.Status == WaitlistStatuses.Waiting, ct);
     }
+
+    public async Task<WaitlistEntry?> FindOwnedAsync(long id, long userId, CancellationToken ct = default)
+    {
+        return await _dbSet
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
+    }
 }

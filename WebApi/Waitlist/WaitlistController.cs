@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using DataAccessLayer.Entities;
 using Microsoft.AspNetCore.Mvc;
 using WebApi.Controllers;
 using WebApi.Enrollments;
@@ -31,6 +32,20 @@ public class WaitlistController : ClubApiController
             JoinWaitlistResult.ClassNotFound => NotFound(),
             JoinWaitlistResult.Rejected rejected => Reject(Operations.JoinWaitlist, rejected.Reason),
             _ => throw new InvalidOperationException($"Unknown join waitlist result {result}.")
+        };
+    }
+
+    [HttpPost("{id}/cancel")]
+    public async Task<IActionResult> Leave(long id, CancellationToken ct)
+    {
+        var result = await _waitlist.LeaveAsync(CurrentUserId, id, ct);
+
+        return result switch
+        {
+            LeaveWaitlistResult.Left left => Ok(new LeaveWaitlistResponse(left.Id, WaitlistStatuses.Cancelled)),
+            LeaveWaitlistResult.NotFound => NotFound(),
+            LeaveWaitlistResult.Rejected rejected => Reject(Operations.LeaveWaitlist, rejected.Reason),
+            _ => throw new InvalidOperationException($"Unknown leave waitlist result {result}.")
         };
     }
 }
