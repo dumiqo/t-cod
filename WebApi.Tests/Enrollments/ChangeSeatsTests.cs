@@ -120,7 +120,7 @@ public class ChangeSeatsTests
         using var response = await ChangeSeatsApi.PostAsync(client, id.ToString(), "{\"seats\":2,\"classId\":1,\"status\":\"cancelled\"}");
 
         await AssertCardAsync(client, response, id);
-        await AssertNoChangeTraceAsync(app, user, id, 2, 5);
+        await AssertEnrollmentStateAsync(app, user, id, 2, 5);
     }
 
     [TestMethod]
@@ -283,7 +283,7 @@ public class ChangeSeatsTests
 
         var body = await AssertCardAsync(client, response, id);
         Assert.AreEqual(remainingVisits + 3, body["pass"]!["remainingVisits"]!.GetValue<int>());
-        await AssertNoChangeTraceAsync(app, user, id, 1, remainingVisits + 3);
+        await AssertEnrollmentStateAsync(app, user, id, 1, remainingVisits + 3);
     }
 
     [TestMethod]
@@ -298,7 +298,7 @@ public class ChangeSeatsTests
 
         var body = await AssertCardAsync(client, response, id);
         Assert.AreEqual(int.MaxValue - 1, body["pass"]!["remainingVisits"]!.GetValue<int>());
-        await AssertNoChangeTraceAsync(app, user, id, 1, int.MaxValue - 1);
+        await AssertEnrollmentStateAsync(app, user, id, 1, int.MaxValue - 1);
     }
 
     [TestMethod]
@@ -317,7 +317,7 @@ public class ChangeSeatsTests
         var body = await AssertCardAsync(client, response, first);
         Assert.AreEqual(first, body["id"]!.GetValue<long>());
         Assert.AreEqual(secondBefore, await SnapshotAsync(app, second));
-        await AssertNoChangeTraceAsync(app, user, first, 3, 4);
+        await AssertEnrollmentStateAsync(app, user, first, 3, 4);
     }
 
     private static async Task<JsonNode> AssertCardAsync(HttpClient client, HttpResponseMessage response, long id)

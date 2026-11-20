@@ -67,4 +67,34 @@ public static partial class Log
         int seats,
         long userId,
         int remainingVisits);
+
+    [LoggerMessage(
+        EventId = 2004,
+        EventName = "EnrollmentSeatsIncreased",
+        Level = LogLevel.Information,
+        Message = "Enrollment seats increased: {EnrollmentId} class {ClassId} seats {OldSeats} -> {NewSeats} for user {UserId}, charged {ChargedVisits}, remaining {RemainingVisits}")]
+    public static partial void EnrollmentSeatsIncreased(
+        ILogger logger,
+        long enrollmentId,
+        long classId,
+        int oldSeats,
+        int newSeats,
+        long userId,
+        int chargedVisits,
+        int remainingVisits);
+
+    [LoggerMessage(
+        EventId = 2005,
+        EventName = "EnrollmentSeatsDecreased",
+        Level = LogLevel.Information,
+        Message = "Enrollment seats decreased: {EnrollmentId} class {ClassId} seats {OldSeats} -> {NewSeats} for user {UserId}, refunded {RefundedVisits}, remaining {RemainingVisits}")]
+    public static partial void EnrollmentSeatsDecreased(
+        ILogger logger,
+        long enrollmentId,
+        long classId,
+        int oldSeats,
+        int newSeats,
+        long userId,
+        int refundedVisits,
+        int remainingVisits);
 }

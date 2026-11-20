@@ -96,7 +96,7 @@ public class ChangeSeatsRejectionTests
 
         var body = await AssertOkAsync(response);
         Assert.AreEqual(3, body["seats"]!.GetValue<int>());
-        await AssertNoChangeTraceAsync(app, user, id, 3, 9);
+        await AssertEnrollmentStateAsync(app, user, id, 3, 9);
         Assert.AreEqual(5, await ActiveSeatsAsync(app, classId));
     }
 
@@ -131,7 +131,7 @@ public class ChangeSeatsRejectionTests
 
         var body = await AssertOkAsync(response);
         Assert.AreEqual(0, body["pass"]!["remainingVisits"]!.GetValue<int>());
-        await AssertNoChangeTraceAsync(app, user, id, 5, 0);
+        await AssertEnrollmentStateAsync(app, user, id, 5, 0);
     }
 
     [TestMethod]
@@ -182,7 +182,7 @@ public class ChangeSeatsRejectionTests
         using var response = await ChangeSeatsAsync(client, id, 3);
 
         await AssertOkAsync(response);
-        await AssertNoChangeTraceAsync(app, user, id, 3, 9);
+        await AssertEnrollmentStateAsync(app, user, id, 3, 9);
     }
 
     [TestMethod]
@@ -198,7 +198,7 @@ public class ChangeSeatsRejectionTests
         using var response = await ChangeSeatsAsync(client, id, 3);
 
         await AssertOkAsync(response);
-        await AssertNoChangeTraceAsync(app, user, id, 3, 9);
+        await AssertEnrollmentStateAsync(app, user, id, 3, 9);
     }
 
     [TestMethod]
@@ -238,7 +238,7 @@ public class ChangeSeatsRejectionTests
         var body = await AssertOkAsync(response);
         Assert.AreEqual(2, body["seats"]!.GetValue<int>());
         Assert.AreEqual(4, body["pass"]!["remainingVisits"]!.GetValue<int>());
-        await AssertNoChangeTraceAsync(app, user, id, 2, 4);
+        await AssertEnrollmentStateAsync(app, user, id, 2, 4);
         using var tooMany = await EnrollAsync(otherClient, classId, 4);
         using var exact = await EnrollAsync(otherClient, classId, 3);
         await AssertConflictAsync(tooMany, "capacity-exceeded");
@@ -258,7 +258,7 @@ public class ChangeSeatsRejectionTests
 
         var body = await AssertOkAsync(change);
         Assert.AreEqual(4, body["pass"]!["remainingVisits"]!.GetValue<int>());
-        await AssertNoChangeTraceAsync(app, user, id, 1, 4);
+        await AssertEnrollmentStateAsync(app, user, id, 1, 4);
 
         using var cancel = await CancelAsync(client, id);
 
@@ -311,7 +311,7 @@ public class ChangeSeatsRejectionTests
 
         var body = await AssertOkAsync(response);
         Assert.AreEqual(newSeats, body["seats"]!.GetValue<int>());
-        await AssertNoChangeTraceAsync(app, user, id, newSeats, remainingVisits);
+        await AssertEnrollmentStateAsync(app, user, id, newSeats, remainingVisits);
     }
 
     [TestMethod]

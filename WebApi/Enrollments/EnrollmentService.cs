@@ -146,7 +146,7 @@ public sealed class EnrollmentService
             return new ChangeSeatsResult.Rejected(RejectReasons.EnrollmentCancelled);
         }
 
-        return await _transactions.RunAsync<ChangeSeatsResult>(Operations.ChangeSeats, async token =>
+        var result = await _transactions.RunAsync<ChangeSeatsResult>(Operations.ChangeSeats, async token =>
         {
             var item = await _unitOfWork.Class.LockIncludingCancelledAsync(found.ClassId, token)
                 ?? throw new InvalidOperationException($"Class {found.ClassId} of enrollment {id} not found.");
@@ -196,6 +196,24 @@ public sealed class EnrollmentService
 
             return TransactionResult.Commit<ChangeSeatsResult>(new ChangeSeatsResult.Changed(card, oldSeats));
         }, ct);
+
+        if (result is ChangeSeatsResult.Changed { Card: var changed, OldSeats: var old })
+        {
+            var remaining = changed.Pass.RemainingVisits;
+
+            if (changed.Seats > old)
+            {
+                Log.EnrollmentSeatsIncreased(_logger, id, changed.Class.Id, old, changed.Seats, userId, changed.Seats - old, remaining);
+                _metrics.VisitsCharged(changed.Seats - old);
+            }
+            else if (changed.Seats < old)
+            {
+                Log.EnrollmentSeatsDecreased(_logger, id, changed.Class.Id, old, changed.Seats, userId, old - changed.Seats, remaining);
+                _metrics.VisitsRefunded(old - changed.Seats);
+            }
+        }
+
+        return result;
     }
 
     private static CancelResult Repeat(Enrollment enrollment)

@@ -248,3 +248,16 @@
 - гонки 14.3: исход A — одно 2002 с `RefundedVisits = 5`, 2005 нет; исход B — 2005 с 3 и 2002
   с 2; `club.visits.refunded` = 5 в обоих. Увеличение против записи и гонки за абонемент —
   событие и счётчик только у победителя.
+
+Нюансы реализации:
+
+- `ChangeSeatsResult` не менялся: поля события берутся из карточки (`Class.Id`, `Seats`,
+  `Pass.RemainingVisits`) и `OldSeats`; пишет `ChangeSeatsAsync` после `RunAsync`, как 8.4 и 12.4.
+  Быстрый путь `enrollment-cancelled` возвращается раньше и событий успеха не пишет;
+- `AssertNoChangeTraceAsync` расширен по разбору; прежняя проверка состояния после `200` вынесена
+  в `AssertEnrollmentStateAsync` (11 вызовов в `ChangeSeatsTests` и `ChangeSeatsRejectionTests`
+  переведены на неё — там успех, события по праву есть);
+- красные до кода 10 тестов (8 в `ChangeSeatsObservabilityTests`, 2 гонки 14.3), все на `Assert`;
+  `409`, `404`, `400`, `503` и то же число мест зелёные с первого прогона — успеха ещё не было;
+- что расширенный `AssertNoChangeTraceAsync` ловит регрессию — поломкой (`club.visits.charged`
+  при отказе в транзакции): красные 22 теста из трёх файлов.

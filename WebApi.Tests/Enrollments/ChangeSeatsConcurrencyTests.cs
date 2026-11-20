@@ -60,12 +60,18 @@ public class ChangeSeatsConcurrencyTests
         {
             await AssertSeatsAsync(changed, 2);
             await AssertCancelledAsync(cancelled, id, 2);
+            Assert.AreEqual("3", One(DecreasedEvents(app)).GetStructuredStateValue("RefundedVisits"));
+            Assert.AreEqual("2", One(RefundedEvents(app)).GetStructuredStateValue("RefundedVisits"));
         }
         else
         {
             await AssertConflictAsync(changed, "enrollment-cancelled");
             await AssertCancelledAsync(cancelled, id, 5);
+            Assert.AreEqual(0, DecreasedEvents(app).Count);
+            Assert.AreEqual("5", One(RefundedEvents(app)).GetStructuredStateValue("RefundedVisits"));
         }
+
+        Assert.AreEqual(5L, MetricSum(app, "club.visits.refunded"));
 
         Assert.AreEqual("cancelled", (await EnrollmentAsync(app, id)).Status);
         Assert.AreEqual(9, await RemainingVisitsAsync(app, user));
@@ -98,6 +104,8 @@ public class ChangeSeatsConcurrencyTests
             await AssertConflictAsync(enrolled, "capacity-exceeded");
             Assert.AreEqual(4, await RemainingVisitsAsync(app, user));
             Assert.AreEqual(5, await RemainingVisitsAsync(app, other));
+            Assert.AreEqual("1", One(IncreasedEvents(app)).GetStructuredStateValue("ChargedVisits"));
+            Assert.AreEqual(0, CreatedEvents(app).Count);
         }
         else
         {
@@ -105,9 +113,11 @@ public class ChangeSeatsConcurrencyTests
             Assert.AreEqual(HttpStatusCode.Created, enrolled.StatusCode, await enrolled.Content.ReadAsStringAsync());
             await AssertNoChangeTraceAsync(app, user, id, 4, 5);
             Assert.AreEqual(4, await RemainingVisitsAsync(app, other));
+            Assert.AreEqual(1, CreatedEvents(app).Count);
         }
 
         Assert.AreEqual(5, await ActiveSeatsAsync(app, classId));
+        Assert.AreEqual(1L, MetricSum(app, "club.visits.charged"));
     }
 
     [TestMethod]
@@ -146,6 +156,12 @@ public class ChangeSeatsConcurrencyTests
         Assert.AreEqual(0, await RemainingVisitsAsync(app, user));
         Assert.AreEqual(responses[0].StatusCode == HttpStatusCode.OK ? 2 : 1, (await EnrollmentAsync(app, first)).Seats);
         Assert.AreEqual(3, await ActiveSeatsOfUserAsync(app, user));
+        long? winner = responses[0].StatusCode == HttpStatusCode.OK ? first : otherIsIncrease ? second : null;
+        CollectionAssert.AreEqual(
+            winner is null ? Array.Empty<string>() : new[] { winner.Value.ToString() },
+            IncreasedEvents(app).Select(x => x.GetStructuredStateValue("EnrollmentId")).ToArray());
+        Assert.AreEqual(winner is null ? 1 : 0, CreatedEvents(app).Count);
+        Assert.AreEqual(1L, MetricSum(app, "club.visits.charged"));
         DisposeAll(responses);
     }
 
@@ -172,6 +188,9 @@ public class ChangeSeatsConcurrencyTests
         await AssertCancelledAsync(cancelled, second, 2);
         Assert.AreEqual(2, (await EnrollmentAsync(app, first)).Seats);
         Assert.AreEqual(5, await RemainingVisitsAsync(app, user));
+        Assert.AreEqual("3", One(DecreasedEvents(app)).GetStructuredStateValue("RefundedVisits"));
+        Assert.AreEqual("2", One(RefundedEvents(app)).GetStructuredStateValue("RefundedVisits"));
+        Assert.AreEqual(5L, MetricSum(app, "club.visits.refunded"));
     }
 
     [TestMethod]
@@ -281,6 +300,13 @@ public class ChangeSeatsConcurrencyTests
         await using var context = app.CreateContext();
 
         return await context.Enrollments.Where(x => x.UserId == user.Id && x.Status == "active").SumAsync(x => x.Seats);
+    }
+
+    private static T One<T>(IReadOnlyList<T> items)
+    {
+        Assert.AreEqual(1, items.Count);
+
+        return items[0];
     }
 
     private static DateTime Now(TestApp app)
