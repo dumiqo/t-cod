@@ -112,7 +112,7 @@
 - [24. Исследование: отказ Redis](tasks/24-redis-failure.md) — готово (41a4819)
 - [25. Исследование: кэш карточки](tasks/25-card-cache-research.md) — готово (01e01bf)
 - [26. Кэш карточки](tasks/26-card-cache.md) — проработано
-  - [26.1 Версия абонемента](tasks/26.1-pass-version.md) — проработано
+  - [26.1 Версия абонемента](tasks/26.1-pass-version.md) — готово (da04f45)
   - [26.2 Кэш и сброс](tasks/26.2-card-cache-invalidation.md) — проработано
   - [26.3 Гонка заполнения и сброса](tasks/26.3-card-cache-fill-race.md) — проработано
   - [26.4 Кэш при отказе Redis](tasks/26.4-card-cache-redis-failure.md) — проработано
