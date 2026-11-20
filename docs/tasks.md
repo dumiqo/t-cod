@@ -117,8 +117,8 @@
   - [26.3 Гонка заполнения и сброса](tasks/26.3-card-cache-fill-race.md) — готово (008d2c7)
   - [26.4 Кэш при отказе Redis](tasks/26.4-card-cache-redis-failure.md) — готово (349039d)
 - [27. Исследование: окно ограничения частоты](tasks/27-rate-limit-window-research.md) — готово (9296fd6)
-- [28. Ограничение частоты](tasks/28-rate-limit.md) — проработано
-  - [28.1 Ограничитель](tasks/28.1-rate-limiter.md) — проработано
-  - [28.2 Ограничение при отказе Redis](tasks/28.2-rate-limit-redis-failure.md) — проработано
+- [28. Ограничение частоты](tasks/28-rate-limit.md) — готово (bf995db)
+  - [28.1 Ограничитель](tasks/28.1-rate-limiter.md) — готово (bf995db)
+  - [28.2 Ограничение при отказе Redis](tasks/28.2-rate-limit-redis-failure.md) — готово (bf995db)
 - [29. Проверка по контракту](tasks/29-contract-check.md)
 - [30. Подготовка к сдаче](tasks/30-submission.md)
