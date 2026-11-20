@@ -159,6 +159,10 @@ namespace DataAccessLayer.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("result_id");
 
+                    b.Property<int?>("ResultPosition")
+                        .HasColumnType("integer")
+                        .HasColumnName("result_position");
+
                     b.Property<int>("Seats")
                         .HasColumnType("integer")
                         .HasColumnName("seats");
@@ -176,7 +180,7 @@ namespace DataAccessLayer.Migrations
                         {
                             t.HasCheckConstraint("ck_idempotency_keys_key_hash", "octet_length(key_hash) = 32");
 
-                            t.HasCheckConstraint("ck_idempotency_keys_operation", "operation IN ('enroll')");
+                            t.HasCheckConstraint("ck_idempotency_keys_operation", "operation IN ('enroll', 'join-waitlist')");
                         });
                 });
 

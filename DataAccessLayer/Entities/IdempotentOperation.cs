@@ -2,7 +2,8 @@ namespace DataAccessLayer.Entities;
 
 public enum IdempotentOperation
 {
-    Enroll
+    Enroll,
+    JoinWaitlist
 }
 
 public static class IdempotentOperations
@@ -12,6 +13,7 @@ public static class IdempotentOperations
         return operation switch
         {
             IdempotentOperation.Enroll => "enroll",
+            IdempotentOperation.JoinWaitlist => "join-waitlist",
             _ => throw new InvalidOperationException($"Unknown idempotent operation {operation}.")
         };
     }
@@ -21,6 +23,7 @@ public static class IdempotentOperations
         return value switch
         {
             "enroll" => IdempotentOperation.Enroll,
+            "join-waitlist" => IdempotentOperation.JoinWaitlist,
             _ => throw new InvalidOperationException($"Unknown idempotent operation '{value}'.")
         };
     }

@@ -19,4 +19,6 @@ public class IdempotencyKey : IEntity
     public long? ResultId { get; set; }
 
     public DateTime? ResultCreatedAt { get; set; }
+
+    public int? ResultPosition { get; set; }
 }

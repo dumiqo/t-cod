@@ -110,6 +110,30 @@ public class IdempotencyKeyRepositoryTests
     }
 
     [TestMethod]
+    public async Task ClaimAsync_SameHashOtherOperation_InsertsSeparateRow()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var userId = await UserIdAsync(context);
+        var hash = Hash();
+        var repository = new UnitOfWork(context).IdempotencyKey;
+        var waitlist = Candidate(userId, hash, 12, 3);
+        waitlist.Operation = IdempotentOperation.JoinWaitlist;
+
+        var first = await repository.ClaimAsync(Candidate(userId, hash, 11, 2));
+        var second = await repository.ClaimAsync(waitlist);
+
+        Assert.IsTrue(first.IsNew);
+        Assert.IsTrue(second.IsNew);
+        await using var check = db.CreateContext();
+        CollectionAssert.AreEqual(
+            new[] { "enroll|11|2", "join-waitlist|12|3" },
+            await check.Database.SqlQuery<string>(
+                    $"SELECT operation || '|' || class_id || '|' || seats AS \"Value\" FROM idempotency_keys ORDER BY id")
+                .ToArrayAsync());
+    }
+
+    [TestMethod]
     public async Task ClaimAsync_OtherHashSameUser_InsertsSeparateRow()
     {
         await using var db = await TestDb.CloneAsync();

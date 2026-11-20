@@ -10,7 +10,7 @@ public class IdempotencyKeyConfiguration : IEntityTypeConfiguration<IdempotencyK
     {
         builder.ToTable("idempotency_keys", x =>
         {
-            x.HasCheckConstraint("ck_idempotency_keys_operation", "operation IN ('enroll')");
+            x.HasCheckConstraint("ck_idempotency_keys_operation", "operation IN ('enroll', 'join-waitlist')");
             x.HasCheckConstraint("ck_idempotency_keys_key_hash", "octet_length(key_hash) = 32");
         });
 
@@ -29,6 +29,7 @@ public class IdempotencyKeyConfiguration : IEntityTypeConfiguration<IdempotencyK
         builder.Property(x => x.Seats).HasColumnName("seats");
         builder.Property(x => x.ResultId).HasColumnName("result_id");
         builder.Property(x => x.ResultCreatedAt).HasColumnName("result_created_at").HasColumnType("timestamp with time zone");
+        builder.Property(x => x.ResultPosition).HasColumnName("result_position");
 
         builder
             .HasOne<User>()

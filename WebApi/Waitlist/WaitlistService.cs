@@ -2,6 +2,7 @@ using DataAccessLayer.Entities;
 using DataAccessLayer.Transactions;
 using DataAccessLayer.UnitOfWork;
 using WebApi.Enrollments;
+using WebApi.Idempotency;
 using WebApi.Time;
 
 namespace WebApi.Waitlist;
@@ -19,8 +20,10 @@ public sealed class WaitlistService
         _clock = clock;
     }
 
-    public Task<JoinWaitlistResult> JoinAsync(long userId, long classId, int seats, CancellationToken ct)
+    public Task<JoinWaitlistResult> JoinAsync(long userId, long classId, int seats, string idempotencyKey, CancellationToken ct)
     {
+        var keyHash = IdempotencyKeyHash.Compute(idempotencyKey);
+
         return _transactions.RunAsync<JoinWaitlistResult>(Operations.JoinWaitlist, async token =>
         {
             var item = await _unitOfWork.Class.LockIncludingCancelledAsync(classId, token);
@@ -28,6 +31,25 @@ public sealed class WaitlistService
             if (item is null)
             {
                 return TransactionResult.Rollback<JoinWaitlistResult>(new JoinWaitlistResult.ClassNotFound());
+            }
+
+            var claim = await _unitOfWork.IdempotencyKey.ClaimAsync(
+                new IdempotencyKey
+                {
+                    UserId = userId,
+                    Operation = IdempotentOperation.JoinWaitlist,
+                    KeyHash = keyHash,
+                    ClassId = classId,
+                    Seats = seats
+                },
+                token);
+
+            if (!claim.IsNew)
+            {
+                return TransactionResult.Rollback<JoinWaitlistResult>(
+                    claim.Key.ClassId == classId && claim.Key.Seats == seats
+                        ? new JoinWaitlistResult.Replayed(JoinWaitlistResponse.Replay(claim.Key))
+                        : new JoinWaitlistResult.Rejected(RejectReasons.IdempotencyKeyReused));
             }
 
             var now = _clock.GetUtcNow().UtcDateTime;
@@ -53,6 +75,11 @@ public sealed class WaitlistService
             await _unitOfWork.SaveChangesAsync(token);
 
             var position = await _unitOfWork.Waitlist.GetPositionAsync(classId, entry.Id, token);
+
+            claim.Key.ResultId = entry.Id;
+            claim.Key.ResultCreatedAt = entry.CreatedAt;
+            claim.Key.ResultPosition = position;
+            await _unitOfWork.SaveChangesAsync(token);
 
             return TransactionResult.Commit<JoinWaitlistResult>(new JoinWaitlistResult.Created(entry, position));
         }, ct);

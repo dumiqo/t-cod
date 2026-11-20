@@ -8,7 +8,8 @@ public class IdempotentOperationsTests
 {
     private static readonly Dictionary<IdempotentOperation, string> Expected = new()
     {
-        [IdempotentOperation.Enroll] = "enroll"
+        [IdempotentOperation.Enroll] = "enroll",
+        [IdempotentOperation.JoinWaitlist] = "join-waitlist"
     };
 
     [TestMethod]
@@ -33,10 +34,17 @@ public class IdempotentOperationsTests
     }
 
     [TestMethod]
+    public void ToValue_JoinWaitlist_EqualsOperationTag()
+    {
+        Assert.AreEqual(Operations.JoinWaitlist, IdempotentOperations.ToValue(IdempotentOperation.JoinWaitlist));
+    }
+
+    [TestMethod]
     [DataRow("Enroll")]
     [DataRow("ENROLL")]
     [DataRow("")]
     [DataRow("waitlist")]
+    [DataRow("JoinWaitlist")]
     public void Parse_UnknownValue_Throws(string value)
     {
         Assert.ThrowsException<InvalidOperationException>(() => IdempotentOperations.Parse(value));
