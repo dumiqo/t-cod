@@ -65,6 +65,11 @@ public sealed class HeldLock : IAsyncDisposable
         return count;
     }
 
+    public Task CommitAsync()
+    {
+        return _transaction.CommitAsync();
+    }
+
     public async ValueTask DisposeAsync()
     {
         await _transaction.DisposeAsync();

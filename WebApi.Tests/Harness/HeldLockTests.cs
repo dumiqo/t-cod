@@ -37,6 +37,20 @@ public class HeldLockTests
         Assert.AreEqual(0L, blocked);
     }
 
+    [TestMethod]
+    public async Task CommitAsync_ChangeInHeldTransaction_VisibleToOtherConnection()
+    {
+        await using var db = await TestDb.CloneAsync();
+        var classId = await FirstClassIdAsync(db);
+        await using var held = await HeldLock.AcquireAsync(db.ConnectionString, $"SELECT 1 FROM classes WHERE id = {classId} FOR UPDATE");
+        await held.ExecuteAsync($"UPDATE classes SET title = 'committed' WHERE id = {classId}");
+
+        await held.CommitAsync();
+
+        await using var context = db.CreateContext();
+        Assert.AreEqual("committed", await context.Classes.Where(x => x.Id == classId).Select(x => x.Title).SingleAsync());
+    }
+
     private static async Task<long> FirstClassIdAsync(TestDb db)
     {
         await using var context = db.CreateContext();
