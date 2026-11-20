@@ -126,6 +126,38 @@ public class RoomLoadRepositoryTests
             rows);
     }
 
+    [TestMethod]
+    [DataRow(false, "IX_classes_starts_at_id")]
+    [DataRow(true, "IX_classes_room_id_starts_at_id")]
+    public async Task GetRoomLoadAsync_Plan_ReadsClassesAndSumsThroughScheduleIndexes(bool withRoom, string classIndex)
+    {
+        await using var db = await TestDb.CloneAsync();
+        var from = db.SeededAt.UtcDateTime.Date;
+        long busyRoomId;
+        await using (var setup = db.CreateContext())
+        {
+            await setup.Database.ExecuteSqlAsync($"INSERT INTO rooms (name) SELECT 'Room ' || g FROM generate_series(1, 50) g");
+            busyRoomId = await setup.Rooms.MaxAsync(x => x.Id);
+            await setup.Database.ExecuteSqlAsync(
+                $"""
+                INSERT INTO classes (room_id, title, starts_at, duration_minutes, capacity, is_cancelled)
+                SELECT r.id, 'Load', {from} + g * interval '1 hour' + r.id * interval '1 second', 60, 10, g % 10 = 0
+                FROM rooms r CROSS JOIN generate_series(1, 300) g
+                """);
+            await setup.Database.ExecuteSqlRawAsync("VACUUM ANALYZE");
+        }
+
+        var recorder = new QueryPlanRecorder();
+        await using var context = db.CreateContext(recorder);
+
+        await new UnitOfWork(context).Class.GetRoomLoadAsync(from, from.AddDays(7), withRoom ? busyRoomId : null);
+
+        Assert.AreEqual(1, recorder.Plans.Count);
+        Assert.AreEqual(
+            string.Join(", ", new[] { classIndex, "IX_enrollments_class_id_user_id", "PK_rooms" }.Order()),
+            string.Join(", ", QueryPlanRecorder.IndexNames(recorder.Plans[0]).Order()));
+    }
+
     private static Enrollment Enrollment(long userId, long classId, int seats, bool cancelled = false)
     {
         return new Enrollment

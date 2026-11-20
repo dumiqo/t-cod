@@ -106,3 +106,42 @@ EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) EXECUTE page_all_after ('2026-01-01', '202
 EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) EXECUTE page_room ('2026-01-01', '2027-01-01', 7, 7, 21);
 \echo '== середина по курсору, зал 7'
 EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) EXECUTE page_room_after ('2026-01-01', '2027-01-01', 7, '2026-07-01', 250000, 7, 21);
+
+-- Загруженность залов (задача 17.3), SQL из лога EF.
+
+PREPARE load_all (timestamptz, timestamptz) AS
+SELECT s."Date", s.room_id, s.name, count(*)::int, COALESCE(sum(s.capacity::bigint), 0.0)::bigint, COALESCE(sum((
+    SELECT COALESCE(sum(e.seats::bigint), 0.0)::bigint
+    FROM enrollments AS e
+    WHERE s.id = e.class_id AND e.status = 'active')), 0.0)::bigint
+FROM (
+    SELECT c.id, c.capacity, c.room_id, r.name, CAST(c.starts_at AT TIME ZONE 'UTC' AS date) AS "Date"
+    FROM classes AS c
+    INNER JOIN rooms AS r ON c.room_id = r.id
+    WHERE NOT (c.is_cancelled) AND c.starts_at >= $1 AND c.starts_at < $2
+) AS s
+GROUP BY s."Date", s.room_id, s.name
+ORDER BY s."Date", s.room_id;
+
+PREPARE load_room (timestamptz, timestamptz, bigint) AS
+SELECT s."Date", s.room_id, s.name, count(*)::int, COALESCE(sum(s.capacity::bigint), 0.0)::bigint, COALESCE(sum((
+    SELECT COALESCE(sum(e.seats::bigint), 0.0)::bigint
+    FROM enrollments AS e
+    WHERE s.id = e.class_id AND e.status = 'active')), 0.0)::bigint
+FROM (
+    SELECT c.id, c.capacity, c.room_id, r.name, CAST(c.starts_at AT TIME ZONE 'UTC' AS date) AS "Date"
+    FROM classes AS c
+    INNER JOIN rooms AS r ON c.room_id = r.id
+    WHERE NOT (c.is_cancelled) AND c.starts_at >= $1 AND c.starts_at < $2 AND c.room_id = $3
+) AS s
+GROUP BY s."Date", s.room_id, s.name
+ORDER BY s."Date", s.room_id;
+
+\echo '== загруженность, месяц, без зала'
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) EXECUTE load_all ('2026-03-01', '2026-04-01');
+\echo '== загруженность, год, без зала'
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) EXECUTE load_all ('2026-01-01', '2027-01-01');
+\echo '== загруженность, месяц, зал 7'
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) EXECUTE load_room ('2026-03-01', '2026-04-01', 7);
+\echo '== загруженность, год, зал 7'
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) EXECUTE load_room ('2026-01-01', '2027-01-01', 7);
