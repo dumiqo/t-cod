@@ -97,4 +97,18 @@ public static partial class Log
         long userId,
         int refundedVisits,
         int remainingVisits);
+
+    [LoggerMessage(
+        EventId = 3001,
+        EventName = "WaitlistJoined",
+        Level = LogLevel.Information,
+        Message = "Waitlist joined: {WaitlistId} class {ClassId} seats {Seats} for user {UserId}, position {Position}")]
+    public static partial void WaitlistJoined(ILogger logger, long waitlistId, long classId, int seats, long userId, int position);
+
+    [LoggerMessage(
+        EventId = 3002,
+        EventName = "WaitlistLeft",
+        Level = LogLevel.Information,
+        Message = "Waitlist left: {WaitlistId} class {ClassId} seats {Seats} for user {UserId}")]
+    public static partial void WaitlistLeft(ILogger logger, long waitlistId, long classId, int seats, long userId);
 }

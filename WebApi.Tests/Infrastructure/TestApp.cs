@@ -18,7 +18,9 @@ public sealed class TestApp : IAsyncDisposable
         "club.visits.charged",
         "club.visits.refunded",
         "club.requests.rejected",
-        "club.idempotency.replayed"
+        "club.idempotency.replayed",
+        "club.waitlist.joined",
+        "club.waitlist.left"
     ];
 
     private readonly TestDb _db;

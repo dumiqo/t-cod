@@ -1,6 +1,7 @@
 using System.Text;
 using DataAccessLayer.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Testing;
 using WebApi.Tests.Enrollments;
 using WebApi.Tests.Infrastructure;
 
@@ -79,5 +80,20 @@ public static class WaitlistApi
         Assert.IsFalse(await context.Enrollments.AnyAsync(x => x.UserId == user.Id));
         Assert.IsFalse(await context.IdempotencyKeys.AnyAsync(x => x.UserId == user.Id));
         Assert.AreEqual(remainingVisits, await EnrollApi.RemainingVisitsAsync(app, user));
+        var joined = JoinedEvents(app);
+        Assert.IsFalse(joined.Any(x => x.GetStructuredStateValue("UserId") == user.Id.ToString()));
+        Assert.AreEqual(
+            joined.Sum(x => long.Parse(x.GetStructuredStateValue("Seats") ?? string.Empty)),
+            EnrollApi.MetricSum(app, "club.waitlist.joined"));
+    }
+
+    public static IReadOnlyList<FakeLogRecord> JoinedEvents(TestApp app)
+    {
+        return app.Logs.GetSnapshot().Where(x => x.Id.Id == 3001).ToList();
+    }
+
+    public static IReadOnlyList<FakeLogRecord> LeftEvents(TestApp app)
+    {
+        return app.Logs.GetSnapshot().Where(x => x.Id.Id == 3002).ToList();
     }
 }

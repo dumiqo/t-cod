@@ -86,6 +86,9 @@ public class WaitlistConcurrencyTests
         var (id, position) = await CreatedAsync(created);
         await EnrollApi.AssertConflictAsync(responses.Single(x => x.StatusCode != HttpStatusCode.Created), "already-waiting");
         Assert.AreEqual(1, position);
+        Assert.AreEqual(1, JoinedEvents(app).Count);
+        Assert.AreEqual(1L, EnrollApi.MetricSum(app, "club.waitlist.joined"));
+        Assert.AreEqual(1, EnrollApi.RejectedEvents(app).Count(x => x.GetStructuredStateValue("Reason") == "already-waiting"));
         await using var context = app.CreateContext();
         Assert.AreEqual(id, await context.WaitlistEntries.Where(x => x.UserId == user.Id).Select(x => x.Id).SingleAsync());
         Assert.AreEqual(id, await context.IdempotencyKeys.Where(x => x.UserId == user.Id).Select(x => x.ResultId).SingleAsync());

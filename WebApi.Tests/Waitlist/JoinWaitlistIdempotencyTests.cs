@@ -310,6 +310,9 @@ public class JoinWaitlistIdempotencyTests
         using var body = JsonDocument.Parse(first);
         Assert.AreEqual(entry.Id, body.RootElement.GetProperty("id").GetInt64());
         CollectionAssert.AreEqual(new[] { $"join-waitlist|{classId}|1|{entry.Id}|1" }, await KeysAsync(app, user));
+        Assert.AreEqual(1, JoinedEvents(app).Count);
+        Assert.AreEqual(1L, EnrollApi.MetricSum(app, "club.waitlist.joined"));
+        Assert.AreEqual(1, EnrollApi.ReplayEvents(app).Count);
     }
 
     [TestMethod]

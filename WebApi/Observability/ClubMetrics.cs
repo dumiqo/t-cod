@@ -11,6 +11,8 @@ public sealed class ClubMetrics
     private readonly Counter<long> _visitsCharged;
     private readonly Counter<long> _idempotencyReplayed;
     private readonly Counter<long> _visitsRefunded;
+    private readonly Counter<long> _waitlistJoined;
+    private readonly Counter<long> _waitlistLeft;
 
     public ClubMetrics(IMeterFactory meterFactory)
     {
@@ -21,6 +23,18 @@ public sealed class ClubMetrics
         _visitsCharged = meter.CreateCounter<long>("club.visits.charged");
         _idempotencyReplayed = meter.CreateCounter<long>("club.idempotency.replayed");
         _visitsRefunded = meter.CreateCounter<long>("club.visits.refunded");
+        _waitlistJoined = meter.CreateCounter<long>("club.waitlist.joined");
+        _waitlistLeft = meter.CreateCounter<long>("club.waitlist.left");
+    }
+
+    public void WaitlistJoined(int seats)
+    {
+        _waitlistJoined.Add(seats);
+    }
+
+    public void WaitlistLeft(int seats)
+    {
+        _waitlistLeft.Add(seats);
     }
 
     public void VisitsRefunded(int visits)

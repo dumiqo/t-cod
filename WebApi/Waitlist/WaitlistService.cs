@@ -3,6 +3,7 @@ using DataAccessLayer.Transactions;
 using DataAccessLayer.UnitOfWork;
 using WebApi.Enrollments;
 using WebApi.Idempotency;
+using WebApi.Observability;
 using WebApi.Time;
 
 namespace WebApi.Waitlist;
@@ -12,18 +13,44 @@ public sealed class WaitlistService
     private readonly IUnitOfWork _unitOfWork;
     private readonly TransactionRunner _transactions;
     private readonly TimeProvider _clock;
+    private readonly ILogger<WaitlistService> _logger;
+    private readonly ClubMetrics _metrics;
 
-    public WaitlistService(IUnitOfWork unitOfWork, TransactionRunner transactions, TimeProvider clock)
+    public WaitlistService(
+        IUnitOfWork unitOfWork,
+        TransactionRunner transactions,
+        TimeProvider clock,
+        ILogger<WaitlistService> logger,
+        ClubMetrics metrics)
     {
         _unitOfWork = unitOfWork;
         _transactions = transactions;
         _clock = clock;
+        _logger = logger;
+        _metrics = metrics;
     }
 
-    public Task<JoinWaitlistResult> JoinAsync(long userId, long classId, int seats, string idempotencyKey, CancellationToken ct)
+    public async Task<JoinWaitlistResult> JoinAsync(long userId, long classId, int seats, string idempotencyKey, CancellationToken ct)
     {
-        var keyHash = IdempotencyKeyHash.Compute(idempotencyKey);
+        var result = await JoinInTransactionAsync(userId, classId, seats, IdempotencyKeyHash.Compute(idempotencyKey), ct);
 
+        if (result is JoinWaitlistResult.Created created)
+        {
+            Log.WaitlistJoined(_logger, created.Entry.Id, classId, seats, userId, created.Position);
+            _metrics.WaitlistJoined(seats);
+        }
+
+        if (result is JoinWaitlistResult.Replayed replayed)
+        {
+            Log.IdempotentReplay(_logger, Operations.JoinWaitlist, replayed.Response.Id, classId, userId);
+            _metrics.IdempotencyReplayed(Operations.JoinWaitlist);
+        }
+
+        return result;
+    }
+
+    private Task<JoinWaitlistResult> JoinInTransactionAsync(long userId, long classId, int seats, byte[] keyHash, CancellationToken ct)
+    {
         return _transactions.RunAsync<JoinWaitlistResult>(Operations.JoinWaitlist, async token =>
         {
             var item = await _unitOfWork.Class.LockIncludingCancelledAsync(classId, token);
@@ -100,7 +127,9 @@ public sealed class WaitlistService
             return Settled(found);
         }
 
-        return await _transactions.RunAsync<LeaveWaitlistResult>(Operations.LeaveWaitlist, async token =>
+        WaitlistEntry? left = null;
+
+        var result = await _transactions.RunAsync<LeaveWaitlistResult>(Operations.LeaveWaitlist, async token =>
         {
             _ = await _unitOfWork.Class.LockIncludingCancelledAsync(found.ClassId, token)
                 ?? throw new InvalidOperationException($"Class {found.ClassId} of waitlist entry {id} not found.");
@@ -118,9 +147,18 @@ public sealed class WaitlistService
             entry.CancelledAt = _clock.GetUtcNow().UtcDateTime.TruncateToMicroseconds();
 
             await _unitOfWork.SaveChangesAsync(token);
+            left = entry;
 
             return TransactionResult.Commit<LeaveWaitlistResult>(new LeaveWaitlistResult.Left(entry.Id));
         }, ct);
+
+        if (left is not null)
+        {
+            Log.WaitlistLeft(_logger, left.Id, left.ClassId, left.Seats, userId);
+            _metrics.WaitlistLeft(left.Seats);
+        }
+
+        return result;
     }
 
     private static LeaveWaitlistResult Settled(WaitlistEntry entry)

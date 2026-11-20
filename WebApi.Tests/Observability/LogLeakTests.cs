@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Testing;
 using WebApi.Tests.Infrastructure;
+using WebApi.Tests.Waitlist;
 
 namespace WebApi.Tests.Observability;
 
@@ -40,6 +41,38 @@ public class LogLeakTests
             "JwtBearer log was not collected.");
 
         var secrets = new[] { AuthClient.SeededUser, DatabaseSeeder.DefaultPassword, token };
+        var leaks = records
+            .SelectMany(record => Texts(record).Select(text => (record.Category, text)))
+            .Where(x => secrets.Any(secret => x.text.Contains(secret, StringComparison.OrdinalIgnoreCase)))
+            .Select(x => $"{x.Category}: {x.text}")
+            .ToList();
+
+        Assert.AreEqual(0, leaks.Count, string.Join(Environment.NewLine, leaks));
+    }
+
+    [TestMethod]
+    public async Task JoinWaitlist_CreatedReplayedAndRejected_LogsContainNeitherEmailNorIdempotencyKey()
+    {
+        await using var app = await TestApp.StartAsync();
+        var user = await app.Data.UserAsync();
+        var classId = await WaitlistApi.FullClassAsync(app);
+        using var client = await app.CreateClientAsync(user.Email);
+        var json = $"{{\"classId\":{classId},\"seats\":1}}";
+        var key = $"created-{Guid.NewGuid():N}";
+        var rejectedKey = $"rejected-{Guid.NewGuid():N}";
+
+        using var created = await WaitlistApi.PostAsync(client, json, key);
+        using var replayed = await WaitlistApi.PostAsync(client, json, key);
+        using var rejected = await WaitlistApi.PostAsync(client, json, rejectedKey);
+
+        Assert.AreEqual(HttpStatusCode.Created, created.StatusCode, await created.Content.ReadAsStringAsync());
+        Assert.AreEqual(HttpStatusCode.Created, replayed.StatusCode, await replayed.Content.ReadAsStringAsync());
+        Assert.AreEqual(HttpStatusCode.Conflict, rejected.StatusCode, await rejected.Content.ReadAsStringAsync());
+        var records = app.Logs.GetSnapshot();
+        Assert.AreEqual(1, records.Count(x => x.Id.Id == 3001));
+        Assert.AreEqual(1, records.Count(x => x.Id.Id == 1004));
+        Assert.AreEqual(1, records.Count(x => x.Id.Id == 1001));
+        var secrets = new[] { user.Email, key, rejectedKey };
         var leaks = records
             .SelectMany(record => Texts(record).Select(text => (record.Category, text)))
             .Where(x => secrets.Any(secret => x.text.Contains(secret, StringComparison.OrdinalIgnoreCase)))
