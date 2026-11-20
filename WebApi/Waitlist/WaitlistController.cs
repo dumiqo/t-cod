@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using WebApi.Controllers;
+using WebApi.Enrollments;
 
 namespace WebApi.Waitlist;
 
@@ -28,6 +29,7 @@ public class WaitlistController : ClubApiController
             JoinWaitlistResult.Created created =>
                 StatusCode(StatusCodes.Status201Created, JoinWaitlistResponse.From(created.Entry, created.Position)),
             JoinWaitlistResult.ClassNotFound => NotFound(),
+            JoinWaitlistResult.Rejected rejected => Reject(Operations.JoinWaitlist, rejected.Reason),
             _ => throw new InvalidOperationException($"Unknown join waitlist result {result}.")
         };
     }

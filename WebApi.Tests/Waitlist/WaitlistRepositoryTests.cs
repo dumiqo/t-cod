@@ -63,6 +63,40 @@ public class WaitlistRepositoryTests
         Assert.AreEqual(1, position);
     }
 
+    [TestMethod]
+    public async Task IsWaitingAsync_OwnWaiting_ReturnsTrue()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var classId = await FirstClassAsync(context);
+        var userId = await UserIdAsync(context, 0);
+        await AddAsync(context, classId, 0, "cancelled");
+        await AddAsync(context, classId, 0, "waiting");
+
+        Assert.IsTrue(await new UnitOfWork(context).Waitlist.IsWaitingAsync(classId, userId));
+    }
+
+    [TestMethod]
+    public async Task IsWaitingAsync_OwnCancelledPromotedOtherClassAndOthersWaiting_ReturnsFalse()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var classId = await FirstClassAsync(context);
+        var otherId = await context.Classes.Where(x => x.Id > classId).OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();
+        var userId = await UserIdAsync(context, 0);
+        await AddAsync(context, classId, 0, "cancelled");
+        await AddAsync(context, classId, 0, "promoted");
+        await AddAsync(context, otherId, 0, "waiting");
+        await AddAsync(context, classId, 1, "waiting");
+
+        Assert.IsFalse(await new UnitOfWork(context).Waitlist.IsWaitingAsync(classId, userId));
+    }
+
+    private static Task<long> UserIdAsync(ClubDbContext context, int userIndex)
+    {
+        return context.Users.OrderBy(x => x.Id).Skip(userIndex).Select(x => x.Id).FirstAsync();
+    }
+
     private static Task<long> FirstClassAsync(ClubDbContext context)
     {
         return context.Classes.OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();

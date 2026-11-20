@@ -1,4 +1,5 @@
 using System.Text;
+using DataAccessLayer.Entities;
 using Microsoft.EntityFrameworkCore;
 using WebApi.Tests.Enrollments;
 using WebApi.Tests.Infrastructure;
@@ -39,6 +40,35 @@ public static class WaitlistApi
         await app.Data.EnrollmentAsync(filler.Id, classId, capacity);
 
         return classId;
+    }
+
+    public static async Task<long> EntryAsync(TestApp app, long userId, long classId, int seats, string status = "waiting")
+    {
+        var entry = new WaitlistEntry
+        {
+            UserId = userId,
+            ClassId = classId,
+            Seats = seats,
+            Status = status,
+            CreatedAt = app.Clock.GetUtcNow().UtcDateTime
+        };
+
+        await using var context = app.CreateContext();
+        context.WaitlistEntries.Add(entry);
+        await context.SaveChangesAsync();
+
+        return entry.Id;
+    }
+
+    public static async Task<string[]> WaitlistSnapshotAsync(TestApp app, long classId)
+    {
+        await using var context = app.CreateContext();
+        var entries = await context.WaitlistEntries.AsNoTracking()
+            .Where(x => x.ClassId == classId)
+            .OrderBy(x => x.Id)
+            .ToListAsync();
+
+        return entries.Select(x => $"{x.Id}|{x.UserId}|{x.Seats}|{x.Status}|{x.CreatedAt:O}|{x.CancelledAt:O}").ToArray();
     }
 
     public static async Task AssertNoTraceAsync(TestApp app, TestUser user, int remainingVisits)

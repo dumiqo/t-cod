@@ -6,4 +6,6 @@ namespace DataAccessLayer.Repositories;
 public interface IWaitlistRepository : IGenericRepository<WaitlistEntry>
 {
     Task<int> GetPositionAsync(long classId, long id, CancellationToken ct = default);
+
+    Task<bool> IsWaitingAsync(long classId, long userId, CancellationToken ct = default);
 }

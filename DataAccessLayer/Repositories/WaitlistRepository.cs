@@ -16,4 +16,9 @@ public class WaitlistRepository : GenericRepository<WaitlistEntry>, IWaitlistRep
         // решение: порядок очереди — по id (задача 19): id выдаётся при вставке под замком занятия, время может совпасть или пойти назад.
         return await _dbSet.CountAsync(x => x.ClassId == classId && x.Status == WaitlistStatuses.Waiting && x.Id <= id, ct);
     }
+
+    public async Task<bool> IsWaitingAsync(long classId, long userId, CancellationToken ct = default)
+    {
+        return await _dbSet.AnyAsync(x => x.ClassId == classId && x.UserId == userId && x.Status == WaitlistStatuses.Waiting, ct);
+    }
 }

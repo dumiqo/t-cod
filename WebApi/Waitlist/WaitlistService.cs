@@ -30,6 +30,14 @@ public sealed class WaitlistService
                 return TransactionResult.Rollback<JoinWaitlistResult>(new JoinWaitlistResult.ClassNotFound());
             }
 
+            var now = _clock.GetUtcNow().UtcDateTime;
+            var reason = await CheckAsync(item, userId, seats, now, token);
+
+            if (reason is not null)
+            {
+                return TransactionResult.Rollback<JoinWaitlistResult>(new JoinWaitlistResult.Rejected(reason));
+            }
+
             // решение: абонемент при постановке не проверяется (задача 19): посещения списываются при продвижении.
             var entry = await _unitOfWork.Waitlist.CreateAsync(
                 new WaitlistEntry
@@ -38,7 +46,7 @@ public sealed class WaitlistService
                     ClassId = classId,
                     Seats = seats,
                     Status = WaitlistStatuses.Waiting,
-                    CreatedAt = _clock.GetUtcNow().UtcDateTime.TruncateToMicroseconds()
+                    CreatedAt = now.TruncateToMicroseconds()
                 },
                 token);
 
@@ -48,5 +56,28 @@ public sealed class WaitlistService
 
             return TransactionResult.Commit<JoinWaitlistResult>(new JoinWaitlistResult.Created(entry, position));
         }, ct);
+    }
+
+    private async Task<string?> CheckAsync(Class item, long userId, int seats, DateTime now, CancellationToken ct)
+    {
+        if (item.IsCancelled)
+        {
+            return RejectReasons.ClassCancelled;
+        }
+
+        if (now >= item.StartsAt)
+        {
+            return RejectReasons.ClassStarted;
+        }
+
+        if (await _unitOfWork.Waitlist.IsWaitingAsync(item.Id, userId, ct))
+        {
+            return RejectReasons.AlreadyWaiting;
+        }
+
+        // решение: запрос больше вместимости не отклоняется (задача 19): своей причины в §7 нет, а seats-available неверна.
+        var occupied = await _unitOfWork.Enrollment.SumActiveSeatsAsync(item.Id, ct);
+
+        return item.Capacity - occupied >= seats ? RejectReasons.SeatsAvailable : null;
     }
 }

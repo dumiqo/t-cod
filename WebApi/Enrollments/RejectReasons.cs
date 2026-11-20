@@ -15,4 +15,8 @@ public static class RejectReasons
     public const string PassExhausted = "pass-exhausted";
 
     public const string CapacityExceeded = "capacity-exceeded";
+
+    public const string AlreadyWaiting = "already-waiting";
+
+    public const string SeatsAvailable = "seats-available";
 }
