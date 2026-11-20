@@ -123,7 +123,7 @@
 - [29. Проверка по контракту](tasks/29-contract-check.md)
   - [29.1 Контрактная матрица](tasks/29.1-contract-matrix.md) — проработано
   - [29.2 Сценарии на сидах](tasks/29.2-seed-scenarios.md) — проработано
-  - [29.3 Инварианты под смешанной нагрузкой](tasks/29.3-mixed-load-invariants.md)
+  - [29.3 Инварианты под смешанной нагрузкой](tasks/29.3-mixed-load-invariants.md) — проработано
   - [29.4 Нагрузочный прогон с Redis и без](tasks/29.4-load-run.md)
   - [29.5 Crash-тест без кэша](tasks/29.5-crash-test.md)
 - [30. Подготовка к сдаче](tasks/30-submission.md)
