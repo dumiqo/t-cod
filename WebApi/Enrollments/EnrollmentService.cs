@@ -130,6 +130,45 @@ public sealed class EnrollmentService
         return result;
     }
 
+    public async Task<ChangeSeatsResult> ChangeSeatsAsync(long userId, long id, int seats, CancellationToken ct)
+    {
+        var found = await _unitOfWork.Enrollment.FindOwnedAsync(id, userId, ct);
+
+        if (found is null)
+        {
+            return new ChangeSeatsResult.NotFound();
+        }
+
+        return await _transactions.RunAsync<ChangeSeatsResult>(Operations.ChangeSeats, async token =>
+        {
+            _ = await _unitOfWork.Class.LockIncludingCancelledAsync(found.ClassId, token)
+                ?? throw new InvalidOperationException($"Class {found.ClassId} of enrollment {id} not found.");
+
+            var enrollment = await _unitOfWork.Enrollment.GetByIdAsync(id, token)
+                ?? throw new InvalidOperationException($"Enrollment {id} disappeared.");
+
+            var pass = await _unitOfWork.Pass.LockByUserAsync(userId, token)
+                ?? throw new InvalidOperationException($"User {userId} has no pass.");
+
+            var oldSeats = enrollment.Seats;
+
+            if (seats != oldSeats)
+            {
+                // решение: уменьшение возвращает разницу без правила двух часов (задача 13); переполнение остатка
+                // (пополнили мимо API) ловит CHECK remaining_visits >= 0 — 500 и откат, как у отмены.
+                pass.RemainingVisits -= seats - oldSeats;
+                enrollment.Seats = seats;
+                await _unitOfWork.SaveChangesAsync(token);
+            }
+
+            // решение: карточка читается под замками до коммита: в ней ровно результат операции.
+            var card = await _unitOfWork.Enrollment.GetCardAsync(id, userId, token)
+                ?? throw new InvalidOperationException($"Enrollment {id} disappeared under lock.");
+
+            return TransactionResult.Commit<ChangeSeatsResult>(new ChangeSeatsResult.Changed(card, oldSeats));
+        }, ct);
+    }
+
     private static CancelResult Repeat(Enrollment enrollment)
     {
         var refundedVisits = enrollment.RefundedVisits

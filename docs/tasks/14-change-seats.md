@@ -115,6 +115,12 @@
   остатком в ответе и в базе; уменьшение с `int.MaxValue` до 1 при остатке `0` — остаток
   `int.MaxValue − 1`; у пользователя две брони на одно занятие — меняется только указанная.
 
+Нюансы реализации:
+
+- `ChangeSeatsApi.PostAsync(client, string id, json)` неоднозначен с `EnrollApi.PostAsync` при
+  `using static` обоих — в тестах вызывается с явным `ChangeSeatsApi.`;
+- в 14.1 `ChangeSeatsResult` — только `Changed` и `NotFound`; `Rejected` добавляет 14.2.
+
 ## 14.2 Причины 409 и границы
 
 Статус: проработано

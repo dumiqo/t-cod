@@ -59,4 +59,17 @@ public class EnrollmentsController : ClubApiController
             _ => throw new InvalidOperationException($"Unknown cancel result {result}.")
         };
     }
+
+    [HttpPost("{id}/seats")]
+    public async Task<IActionResult> ChangeSeats(long id, [FromBody, Required] ChangeSeatsRequest? request, CancellationToken ct)
+    {
+        var result = await _enrollments.ChangeSeatsAsync(CurrentUserId, id, request!.Seats!.Value, ct);
+
+        return result switch
+        {
+            ChangeSeatsResult.Changed changed => Ok(EnrollmentCardResponse.From(changed.Card)),
+            ChangeSeatsResult.NotFound => NotFound(),
+            _ => throw new InvalidOperationException($"Unknown change seats result {result}.")
+        };
+    }
 }
