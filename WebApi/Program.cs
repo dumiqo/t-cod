@@ -73,6 +73,7 @@ builder.Services.AddOptions<RedisSettings>()
         "Redis:OperationTimeout must be at least 1 ms and less than 5 s.")
     .ValidateOnStart();
 builder.Services.AddSingleton<RedisGuard>();
+builder.Services.AddSingleton<LocalRateJournal>();
 
 builder.Services.AddOptions<CardCacheSettings>()
     .BindConfiguration(CardCacheSettings.Section)

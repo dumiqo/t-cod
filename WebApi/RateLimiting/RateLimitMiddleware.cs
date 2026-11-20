@@ -8,10 +8,6 @@ namespace WebApi.RateLimiting;
 
 public sealed class RateLimitMiddleware
 {
-    // решение: 60 запросов и минута — контракт, а не параметр эксплуатации (задача 27).
-    private const int Limit = 60;
-    private const long WindowMilliseconds = 60_000;
-
     private const string Script = """
         local now = tonumber(ARGV[1])
         redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - tonumber(ARGV[2]))
@@ -26,6 +22,7 @@ public sealed class RateLimitMiddleware
     private readonly RequestDelegate _next;
     private readonly IConnectionMultiplexer _redis;
     private readonly RedisGuard _guard;
+    private readonly LocalRateJournal _journal;
     private readonly TimeProvider _clock;
     private readonly ClubMetrics _metrics;
     private readonly ProblemDetailsFactory _problems;
@@ -35,6 +32,7 @@ public sealed class RateLimitMiddleware
         RequestDelegate next,
         IConnectionMultiplexer redis,
         RedisGuard guard,
+        LocalRateJournal journal,
         TimeProvider clock,
         ClubMetrics metrics,
         ProblemDetailsFactory problems,
@@ -43,6 +41,7 @@ public sealed class RateLimitMiddleware
         _next = next;
         _redis = redis;
         _guard = guard;
+        _journal = journal;
         _clock = clock;
         _metrics = metrics;
         _problems = problems;
@@ -60,15 +59,21 @@ public sealed class RateLimitMiddleware
 
         var userId = long.Parse(context.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var now = _clock.GetUtcNow().ToUnixTimeMilliseconds();
-        var oldest = -1L;
+        if (!_journal.TryReserve(userId, now, out var oldest))
+        {
+            await RejectAsync(context, userId, now, oldest);
+            return;
+        }
 
-        // решение: Redis недоступен — запрос пропускается и в журнал не попадает (задача 24).
+        oldest = -1L;
+
+        // решение: Redis недоступен — решает локальный журнал, бронь в нём остаётся (задача 28.2).
         if (!await _guard.TryAsync(
                 "rate-limit",
                 async () => oldest = (long)await _redis.GetDatabase().ScriptEvaluateAsync(
                     Script,
                     [$"rate:{userId}"],
-                    [now, WindowMilliseconds, Limit, $"{now}:{Guid.NewGuid():N}"]),
+                    [now, RateLimitWindow.Milliseconds, RateLimitWindow.Limit, $"{now}:{Guid.NewGuid():N}"]),
                 context.RequestAborted)
             || oldest < 0)
         {
@@ -76,7 +81,13 @@ public sealed class RateLimitMiddleware
             return;
         }
 
-        var retryAfter = (oldest + WindowMilliseconds - now + 999) / 1000;
+        _journal.Release(userId, now);
+        await RejectAsync(context, userId, now, oldest);
+    }
+
+    private async Task RejectAsync(HttpContext context, long userId, long now, long oldest)
+    {
+        var retryAfter = (oldest + RateLimitWindow.Milliseconds - now + 999) / 1000;
         Log.RequestRateLimited(_logger, userId, retryAfter);
         _metrics.RequestRejected("rate-limit", "too-many-requests");
 
