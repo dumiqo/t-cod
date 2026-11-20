@@ -24,3 +24,7 @@
 на запрос, `429` в журнал не попадают и получают `Retry-After`. Свой middleware между
 аутентификацией и авторизацией по метке на `ClubApiController`, без встроенного `AddRateLimiter`;
 60 и минута — константы. Реализация — в 28.1, отказ Redis — в 28.2.
+
+Дополнено при проработке: тело `429` — ProblemDetails из фабрики с `traceId`, без `reason`;
+`club.requests.rejected` с тегами `rate-limit` / `too-many-requests` (разбивка по эндпоинтам —
+во встроенной метрике ASP.NET); событие 1003 с `userId` и `retryAfter`, без пути.

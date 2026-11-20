@@ -10,6 +10,8 @@
   Тесты на 61-й запрос и на новое окно — переводом фейковых часов;
 - `429` — событие 1003 и `club.requests.rejected` по схеме задачи 6, с `Retry-After`
   (решение задачи 27). Встроенных метрик `aspnetcore.rate_limiting.*` нет — счётчик свой;
+  теги `operation: rate-limit`, `reason: too-many-requests`, в событии `userId` и `retryAfter`;
+  тело — ProblemDetails из фабрики с `traceId`, без `reason`;
 - вне лимита — `/health`, `/health/ready`, `/auth/login` и Swagger; тест на это (перенесено
   из задачи 7.4).
 
