@@ -5,6 +5,8 @@ namespace WebApi.Waitlist;
 
 public sealed record PromotionStep(WaitlistEntry Entry, string? SkipReason);
 
+public sealed record PromotionOutcome(WaitlistEntry Entry, string? SkipReason, int RemainingVisits);
+
 public static class WaitlistPromotion
 {
     public const string OwnRelease = "own-release";

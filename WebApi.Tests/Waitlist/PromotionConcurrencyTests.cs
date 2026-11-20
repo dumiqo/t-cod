@@ -40,6 +40,7 @@ public class PromotionConcurrencyTests
         CollectionAssert.AreEqual(new[] { "promoted|1", "promoted|1" }, await PromotionOnCancelTests.QueueAsync(app, entryB, entryA));
         Assert.AreEqual(5, await RemainingVisitsAsync(app, a));
         Assert.AreEqual(5, await RemainingVisitsAsync(app, b));
+        await AssertPromotionEventsMatchDbAsync(app);
         DisposeAll(responses);
     }
 
@@ -81,6 +82,7 @@ public class PromotionConcurrencyTests
         Assert.AreEqual(first == "promoted|1" ? 4 : 5, await RemainingVisitsAsync(app, users[0]));
         Assert.AreEqual(second == "promoted|1" ? 4 : 5, await RemainingVisitsAsync(app, users[1]));
         Assert.AreEqual(1L, await ActiveSeatsAsync(app, classId));
+        await AssertPromotionEventsMatchDbAsync(app);
         cancel.Dispose();
         leave.Dispose();
     }
@@ -135,6 +137,7 @@ public class PromotionConcurrencyTests
             Assert.AreEqual(promotedNewcomer ? 2L : 1L, await ActiveSeatsAsync(app, classId));
         }
 
+        await AssertPromotionEventsMatchDbAsync(app);
         cancel.Dispose();
         join.Dispose();
     }
@@ -170,6 +173,7 @@ public class PromotionConcurrencyTests
         Assert.AreEqual(waiterState == "promoted|2" ? 3 : 5, await RemainingVisitsAsync(app, waiter));
         Assert.AreEqual(enrollStatus == 201 ? 4 : 5, await RemainingVisitsAsync(app, newcomer));
         Assert.AreEqual(enrollStatus == 201 ? 1L : 2L, await ActiveSeatsAsync(app, classId));
+        await AssertPromotionEventsMatchDbAsync(app);
         cancel.Dispose();
         enroll.Dispose();
     }
@@ -226,6 +230,7 @@ public class PromotionConcurrencyTests
             .Where(x => x.ClassId == classId && x.Status == "promoted").Select(x => x.Id).ToArrayAsync();
         CollectionAssert.AreEqual(
             promoted.Select(_ => "promoted|1").ToArray(), await PromotionOnCancelTests.QueueAsync(app, promoted));
+        await AssertPromotionEventsMatchDbAsync(app);
         DisposeAll(responses);
         foreach (var client in clients)
         {

@@ -111,4 +111,25 @@ public static partial class Log
         Level = LogLevel.Information,
         Message = "Waitlist left: {WaitlistId} class {ClassId} seats {Seats} for user {UserId}")]
     public static partial void WaitlistLeft(ILogger logger, long waitlistId, long classId, int seats, long userId);
+
+    [LoggerMessage(
+        EventId = 3003,
+        EventName = "WaitlistPromoted",
+        Level = LogLevel.Information,
+        Message = "Waitlist promoted: {WaitlistId} to enrollment {EnrollmentId} class {ClassId} seats {Seats} for user {UserId}, remaining {RemainingVisits}")]
+    public static partial void WaitlistPromoted(
+        ILogger logger,
+        long waitlistId,
+        long enrollmentId,
+        long classId,
+        int seats,
+        long userId,
+        int remainingVisits);
+
+    [LoggerMessage(
+        EventId = 3004,
+        EventName = "WaitlistPromotionSkipped",
+        Level = LogLevel.Information,
+        Message = "Waitlist promotion skipped: {WaitlistId} class {ClassId} seats {Seats} for user {UserId}, reason {Reason}")]
+    public static partial void WaitlistPromotionSkipped(ILogger logger, long waitlistId, long classId, int seats, long userId, string reason);
 }

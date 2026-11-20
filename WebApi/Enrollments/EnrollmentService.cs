@@ -113,10 +113,10 @@ public sealed class EnrollmentService
             pass.RemainingVisits += refundedVisits;
 
             await _unitOfWork.SaveChangesAsync(token);
-            await PromoteAsync(item, queue, passes, userId, now, token);
+            var promotions = await PromoteAsync(item, queue, passes, userId, now, token);
 
             return TransactionResult.Commit<CancelResult>(
-                new CancelResult.Cancelled(enrollment.Id, item.Id, enrollment.Seats, refundedVisits, pass.RemainingVisits, false));
+                new CancelResult.Cancelled(enrollment.Id, item.Id, enrollment.Seats, refundedVisits, pass.RemainingVisits, false, promotions));
         }, ct);
 
         if (result is CancelResult.Cancelled { Repeated: false, RemainingVisits: { } remaining } cancelled)
@@ -130,6 +130,8 @@ public sealed class EnrollmentService
             {
                 Log.EnrollmentCancelledWithoutRefund(_logger, id, cancelled.ClassId, cancelled.Seats, userId, remaining);
             }
+
+            ObservePromotions(cancelled.ClassId, cancelled.Promotions);
         }
 
         return result;
@@ -189,6 +191,8 @@ public sealed class EnrollmentService
                 return TransactionResult.Rollback<ChangeSeatsResult>(new ChangeSeatsResult.Rejected(reason));
             }
 
+            IReadOnlyList<PromotionOutcome> promotions = [];
+
             if (seats != oldSeats)
             {
                 // решение: уменьшение возвращает разницу без правила двух часов (задача 13); переполнение остатка
@@ -196,17 +200,17 @@ public sealed class EnrollmentService
                 pass.RemainingVisits -= seats - oldSeats;
                 enrollment.Seats = seats;
                 await _unitOfWork.SaveChangesAsync(token);
-                await PromoteAsync(item, queue, passes, userId, now, token);
+                promotions = await PromoteAsync(item, queue, passes, userId, now, token);
             }
 
             // решение: карточка читается под замками до коммита: в ней ровно результат операции.
             var card = await _unitOfWork.Enrollment.GetCardAsync(id, userId, token)
                 ?? throw new InvalidOperationException($"Enrollment {id} disappeared under lock.");
 
-            return TransactionResult.Commit<ChangeSeatsResult>(new ChangeSeatsResult.Changed(card, oldSeats));
+            return TransactionResult.Commit<ChangeSeatsResult>(new ChangeSeatsResult.Changed(card, oldSeats, promotions));
         }, ct);
 
-        if (result is ChangeSeatsResult.Changed { Card: var changed, OldSeats: var old })
+        if (result is ChangeSeatsResult.Changed { Card: var changed, OldSeats: var old, Promotions: var promoted })
         {
             var remaining = changed.Pass.RemainingVisits;
 
@@ -220,16 +224,41 @@ public sealed class EnrollmentService
                 Log.EnrollmentSeatsDecreased(_logger, id, changed.Class.Id, old, changed.Seats, userId, old - changed.Seats, remaining);
                 _metrics.VisitsRefunded(old - changed.Seats);
             }
+
+            ObservePromotions(changed.Class.Id, promoted);
         }
 
         return result;
     }
 
-    private async Task PromoteAsync(Class item, List<WaitlistEntry> queue, List<Pass> passes, long userId, DateTime now, CancellationToken ct)
+    private void ObservePromotions(long classId, IReadOnlyList<PromotionOutcome> promotions)
+    {
+        foreach (var (entry, skipReason, remaining) in promotions)
+        {
+            if (skipReason is null)
+            {
+                Log.WaitlistPromoted(_logger, entry.Id, entry.Id, classId, entry.Seats, entry.UserId, remaining);
+                _metrics.WaitlistPromoted(entry.Seats);
+                _metrics.VisitsCharged(entry.Seats);
+            }
+            else
+            {
+                Log.WaitlistPromotionSkipped(_logger, entry.Id, classId, entry.Seats, entry.UserId, skipReason);
+            }
+        }
+    }
+
+    private async Task<IReadOnlyList<PromotionOutcome>> PromoteAsync(
+        Class item,
+        List<WaitlistEntry> queue,
+        List<Pass> passes,
+        long userId,
+        DateTime now,
+        CancellationToken ct)
     {
         if (queue.Count == 0)
         {
-            return;
+            return [];
         }
 
         var freeSeats = item.Capacity - await _unitOfWork.Enrollment.SumActiveSeatsAsync(item.Id, ct);
@@ -257,6 +286,12 @@ public sealed class EnrollmentService
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // решение: пропуск из-за мест не наблюдается (задача 23): иначе каждая отмена логировала бы всю очередь.
+        return steps
+            .Where(x => x.SkipReason != WaitlistPromotion.NoSeats)
+            .Select(x => new PromotionOutcome(x.Entry, x.SkipReason, passesByUser[x.Entry.UserId].RemainingVisits))
+            .ToList();
     }
 
     private static CancelResult Repeat(Enrollment enrollment)
@@ -264,7 +299,7 @@ public sealed class EnrollmentService
         var refundedVisits = enrollment.RefundedVisits
             ?? throw new InvalidOperationException($"Enrollment {enrollment.Id} is cancelled without refunded visits.");
 
-        return new CancelResult.Cancelled(enrollment.Id, enrollment.ClassId, enrollment.Seats, refundedVisits, null, true);
+        return new CancelResult.Cancelled(enrollment.Id, enrollment.ClassId, enrollment.Seats, refundedVisits, null, true, []);
     }
 
     private Task<EnrollResult> EnrollInTransactionAsync(long userId, long classId, int seats, byte[] keyHash, CancellationToken ct)

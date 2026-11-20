@@ -87,6 +87,23 @@ public static class WaitlistApi
             EnrollApi.MetricSum(app, "club.waitlist.joined"));
     }
 
+    public static async Task AssertPromotionEventsMatchDbAsync(TestApp app)
+    {
+        await using var context = app.CreateContext();
+        var promoted = await context.WaitlistEntries.AsNoTracking()
+            .Where(x => x.Status == WaitlistStatuses.Promoted)
+            .Select(x => x.Id + "|" + x.Seats)
+            .ToArrayAsync();
+        var events = app.Logs.GetSnapshot().Where(x => x.Id.Id == 3003).ToList();
+
+        CollectionAssert.AreEquivalent(
+            promoted,
+            events.Select(x => x.GetStructuredStateValue("WaitlistId") + "|" + x.GetStructuredStateValue("Seats")).ToArray());
+        Assert.AreEqual(
+            events.Sum(x => long.Parse(x.GetStructuredStateValue("Seats") ?? string.Empty)),
+            EnrollApi.MetricSum(app, "club.waitlist.promoted"));
+    }
+
     public static IReadOnlyList<FakeLogRecord> JoinedEvents(TestApp app)
     {
         return app.Logs.GetSnapshot().Where(x => x.Id.Id == 3001).ToList();
