@@ -458,6 +458,41 @@ docker compose exec postgres sh -c "tr -d '\r' < /tmp/race-check.sh | sh"
   и сам `roomId`, если он есть, затем курсор. Токен с неверной формой — `400`. Смысл токена
   не проверяется: курсор вне периода безвреден, потому что параметры всё равно совпадают
   с проверенными в query. Пустой `?continuationToken=` — то же, что отсутствующий.
+- Индексы под страницу — частичные, по тем же условиям, что пишет EF: `classes (starts_at, id)`
+  и `classes (room_id, starts_at, id)` с `WHERE NOT is_cancelled`, `enrollments (class_id,
+  user_id) INCLUDE (seats)` с `WHERE status = 'active'`. Занятия читаются по индексу сразу
+  в нужном порядке, `LIMIT` останавливает чтение на `limit + 1` строке, курсор `(starts_at, id) >
+  (…)` уходит в условие индекса. Обе суммы мест — только по индексу броней, без обращения
+  к таблице. Выданные индексы `room_id` и `class_id` оставлены: проверкам внешних ключей нужен
+  полный индекс, а частичный такую проверку не обслужит.
+- Тест закрепляет план: страница на клоне с 18 тыс. занятий в 60 залах после `VACUUM ANALYZE`
+  должна читать занятия и суммы этими тремя индексами. Без `VACUUM` суммы уходили на выданные
+  `class_id` и `user_id`: пока карта видимости пуста, чтение только по индексу не дешевле
+  обычного. В рабочей базе её заполняет autovacuum.
+- Ручная проверка — `docs/schedule-explain.sql`: чистая миграция, 500 тыс. занятий в 50 залах
+  (10 % отменённых), 3 млн броней, 1000 пользователей. `EXPLAIN (ANALYZE, BUFFERS)`, Postgres 16,
+  страница 21 строка:
+
+  | Страница | Индекс занятий | Суммы | Время |
+  |---|---|---|---|
+  | первая, без зала | `IX_classes_starts_at_id` | index-only, `Heap Fetches: 0` | 0.29 мс |
+  | по курсору, без зала | `IX_classes_starts_at_id`, курсор в `Index Cond` | index-only, `Heap Fetches: 0` | 0.27 мс |
+  | первая, зал 7 | `IX_classes_room_id_starts_at_id` | index-only, `Heap Fetches: 0` | 0.30 мс |
+  | по курсору, зал 7 | `IX_classes_room_id_starts_at_id`, курсор в `Index Cond` | index-only, `Heap Fetches: 0` | 0.32 мс |
+
+  Отрывок плана — по курсору, зал 7:
+
+  ```
+  ->  Index Scan using "IX_classes_room_id_starts_at_id" on classes c (actual time=0.021..0.038 rows=21 loops=1)
+        Index Cond: ((room_id = '7'::bigint) AND (starts_at >= '2026-01-01 00:00:00+00'::timestamp with time zone) AND (starts_at < '2027-01-01 00:00:00+00'::timestamp with time zone) AND (ROW(starts_at, id) > ROW('2026-07-01 00:00:00+00'::timestamp with time zone, '250000'::bigint)))
+  ->  Index Only Scan using "IX_enrollments_class_id_user_id" on enrollments e (actual time=0.004..0.005 rows=5 loops=21)
+        Index Cond: (class_id = c.id)
+        Heap Fetches: 0
+  ->  Index Only Scan using "IX_enrollments_class_id_user_id" on enrollments e0 (actual time=0.001..0.001 rows=0 loops=21)
+        Index Cond: ((class_id = c.id) AND (user_id = '7'::bigint))
+        Heap Fetches: 0
+  Execution Time: 0.317 ms
+  ```
 
 ## За рамками
 

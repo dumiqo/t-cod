@@ -35,5 +35,12 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
             .HasOne(x => x.Class)
             .WithMany(x => x.Enrollments)
             .HasForeignKey(x => x.ClassId);
+
+        // решение: FK-индекс объявлен явно — иначе EF удаляет его в пользу частичного (class_id, user_id), а проверкам FK нужен полный.
+        builder.HasIndex(x => x.ClassId);
+        builder
+            .HasIndex(x => new { x.ClassId, x.UserId })
+            .IncludeProperties(x => x.Seats)
+            .HasFilter("status = 'active'");
     }
 }

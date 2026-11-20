@@ -25,6 +25,11 @@ public class ClassConfiguration : IEntityTypeConfiguration<Class>
             .WithMany()
             .HasForeignKey(x => x.RoomId);
 
+        // решение: FK-индекс объявлен явно — иначе EF удаляет его в пользу частичного (room_id, …), а проверкам FK нужен полный.
+        builder.HasIndex(x => x.RoomId);
+        builder.HasIndex(x => new { x.StartsAt, x.Id }).HasFilter("NOT is_cancelled");
+        builder.HasIndex(x => new { x.RoomId, x.StartsAt, x.Id }).HasFilter("NOT is_cancelled");
+
         builder.HasQueryFilter(x => !x.IsCancelled);
     }
 }

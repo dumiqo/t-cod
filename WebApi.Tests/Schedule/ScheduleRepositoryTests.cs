@@ -144,6 +144,40 @@ public class ScheduleRepositoryTests
         CollectionAssert.AreEqual(new[] { third.Id, later.Id }, rows.Select(x => x.Id).ToArray());
     }
 
+    [TestMethod]
+    [DataRow(false, false, "IX_classes_starts_at_id")]
+    [DataRow(false, true, "IX_classes_starts_at_id")]
+    [DataRow(true, false, "IX_classes_room_id_starts_at_id")]
+    [DataRow(true, true, "IX_classes_room_id_starts_at_id")]
+    public async Task GetSchedulePageAsync_Plan_ReadsClassesAndSumsThroughScheduleIndexes(bool withRoom, bool withCursor, string classIndex)
+    {
+        await using var db = await TestDb.CloneAsync();
+        var from = db.SeededAt.UtcDateTime.Date;
+        await using (var setup = db.CreateContext())
+        {
+            // решение: на сиде (200 занятий, 10 залов) выбор индекса — дело случая; 18 тыс. занятий в 60 залах делают его устойчивым.
+            await setup.Database.ExecuteSqlAsync($"INSERT INTO rooms (name) SELECT 'Room ' || g FROM generate_series(1, 50) g");
+            await setup.Database.ExecuteSqlAsync(
+                $"""
+                INSERT INTO classes (room_id, title, starts_at, duration_minutes, capacity, is_cancelled)
+                SELECT r.id, 'Load', {from} + g * interval '1 hour' + r.id * interval '1 second', 60, 10, g % 10 = 0
+                FROM rooms r CROSS JOIN generate_series(1, 300) g
+                """);
+            await setup.Database.ExecuteSqlRawAsync("VACUUM ANALYZE");
+        }
+
+        var recorder = new QueryPlanRecorder();
+        await using var context = db.CreateContext(recorder);
+        var query = new ScheduleQuery(from, from.AddDays(7), withRoom ? 1 : null, 21, withCursor ? new ScheduleCursor(from.AddDays(1), 50) : null);
+
+        await new UnitOfWork(context).Class.GetSchedulePageAsync(query, 1);
+
+        Assert.AreEqual(1, recorder.Plans.Count);
+        Assert.AreEqual(
+            string.Join(", ", new[] { classIndex, "IX_enrollments_class_id_user_id", "PK_rooms" }.Order()),
+            string.Join(", ", QueryPlanRecorder.IndexNames(recorder.Plans[0]).Order()));
+    }
+
     private static readonly DateTime CreatedAt = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static Enrollment Enrollment(long userId, long classId, int seats, bool cancelled = false)

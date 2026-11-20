@@ -60,6 +60,12 @@ namespace DataAccessLayer.Migrations
 
                     b.HasIndex("RoomId");
 
+                    b.HasIndex("StartsAt", "Id")
+                        .HasFilter("NOT is_cancelled");
+
+                    b.HasIndex("RoomId", "StartsAt", "Id")
+                        .HasFilter("NOT is_cancelled");
+
                     b.ToTable("classes", (string)null);
                 });
 
@@ -106,6 +112,11 @@ namespace DataAccessLayer.Migrations
                     b.HasIndex("ClassId");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("ClassId", "UserId")
+                        .HasFilter("status = 'active'");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("ClassId", "UserId"), new[] { "Seats" });
 
                     b.ToTable("enrollments", null, t =>
                         {
