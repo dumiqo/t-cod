@@ -99,7 +99,7 @@
   - [20.1 Таблица очереди и постановка (§7)](tasks/20.1-waitlist-table-join.md) — готово (26ca785)
   - [20.2 Причины 409 §7 и границы](tasks/20.2-join-conflicts.md) — готово (6d6f50b)
   - [20.3 Уход из очереди (§8)](tasks/20.3-leave-waitlist.md) — готово (0fe3e85)
-  - [20.4 Идемпотентность §7](tasks/20.4-join-idempotency.md) — проработано
+  - [20.4 Идемпотентность §7](tasks/20.4-join-idempotency.md) — готово (d780516)
   - [20.5 Конкурентность и часы](tasks/20.5-waitlist-concurrency.md) — проработано
   - [20.6 Наблюдаемость](tasks/20.6-waitlist-observability.md) — проработано
 - [21. Исследование: порядок продвижения](tasks/21-promotion-order.md)
