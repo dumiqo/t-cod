@@ -11,7 +11,8 @@ public abstract record CancelResult
         int RefundedVisits,
         int? RemainingVisits,
         bool Repeated,
-        IReadOnlyList<PromotionOutcome> Promotions) : CancelResult;
+        IReadOnlyList<PromotionOutcome> Promotions,
+        IReadOnlyDictionary<long, long> Versions) : CancelResult;
 
     public sealed record NotFound : CancelResult;
 

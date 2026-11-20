@@ -111,12 +111,13 @@ public sealed class EnrollmentService
             // решение: переполнение остатка (пополнили мимо API) не проверяется: отрицательную сумму ловит
             // CHECK remaining_visits >= 0, ответ 500 и откат; своя причина 409 сломала бы контракт.
             pass.RemainingVisits += refundedVisits;
+            pass.Version++;
 
             await _unitOfWork.SaveChangesAsync(token);
             var promotions = await PromoteAsync(item, queue, passes, userId, now, token);
 
             return TransactionResult.Commit<CancelResult>(
-                new CancelResult.Cancelled(enrollment.Id, item.Id, enrollment.Seats, refundedVisits, pass.RemainingVisits, false, promotions));
+                new CancelResult.Cancelled(enrollment.Id, item.Id, enrollment.Seats, refundedVisits, pass.RemainingVisits, false, promotions, Versions(passes, userId, promotions)));
         }, ct);
 
         if (result is CancelResult.Cancelled { Repeated: false, RemainingVisits: { } remaining } cancelled)
@@ -198,6 +199,7 @@ public sealed class EnrollmentService
                 // решение: уменьшение возвращает разницу без правила двух часов (задача 13); переполнение остатка
                 // (пополнили мимо API) ловит CHECK remaining_visits >= 0 — 500 и откат, как у отмены.
                 pass.RemainingVisits -= seats - oldSeats;
+                pass.Version++;
                 enrollment.Seats = seats;
                 await _unitOfWork.SaveChangesAsync(token);
                 promotions = await PromoteAsync(item, queue, passes, userId, now, token);
@@ -207,7 +209,11 @@ public sealed class EnrollmentService
             var card = await _unitOfWork.Enrollment.GetCardAsync(id, userId, token)
                 ?? throw new InvalidOperationException($"Enrollment {id} disappeared under lock.");
 
-            return TransactionResult.Commit<ChangeSeatsResult>(new ChangeSeatsResult.Changed(card, oldSeats, promotions));
+            return TransactionResult.Commit<ChangeSeatsResult>(new ChangeSeatsResult.Changed(
+                card,
+                oldSeats,
+                promotions,
+                seats == oldSeats ? new Dictionary<long, long>() : Versions(passes, userId, promotions)));
         }, ct);
 
         if (result is ChangeSeatsResult.Changed { Card: var changed, OldSeats: var old, Promotions: var promoted })
@@ -285,6 +291,11 @@ public sealed class EnrollmentService
                 ct);
         }
 
+        foreach (var promotedUserId in steps.Where(x => x.SkipReason is null).Select(x => x.Entry.UserId).Distinct())
+        {
+            passesByUser[promotedUserId].Version++;
+        }
+
         await _unitOfWork.SaveChangesAsync(ct);
 
         // решение: пропуск из-за мест не наблюдается (задача 23): иначе каждая отмена логировала бы всю очередь.
@@ -294,12 +305,19 @@ public sealed class EnrollmentService
             .ToList();
     }
 
+    private static IReadOnlyDictionary<long, long> Versions(List<Pass> passes, long userId, IReadOnlyList<PromotionOutcome> promotions)
+    {
+        var promoted = promotions.Where(x => x.SkipReason is null).Select(x => x.Entry.UserId).ToHashSet();
+
+        return passes.Where(x => x.UserId == userId || promoted.Contains(x.UserId)).ToDictionary(x => x.UserId, x => x.Version);
+    }
+
     private static CancelResult Repeat(Enrollment enrollment)
     {
         var refundedVisits = enrollment.RefundedVisits
             ?? throw new InvalidOperationException($"Enrollment {enrollment.Id} is cancelled without refunded visits.");
 
-        return new CancelResult.Cancelled(enrollment.Id, enrollment.ClassId, enrollment.Seats, refundedVisits, null, true, []);
+        return new CancelResult.Cancelled(enrollment.Id, enrollment.ClassId, enrollment.Seats, refundedVisits, null, true, [], new Dictionary<long, long>());
     }
 
     private Task<EnrollResult> EnrollInTransactionAsync(long userId, long classId, int seats, byte[] keyHash, CancellationToken ct)
@@ -348,6 +366,7 @@ public sealed class EnrollmentService
             }
 
             pass.RemainingVisits -= seats;
+            pass.Version++;
 
             var enrollment = await _unitOfWork.Enrollment.CreateAsync(
                 new Enrollment
@@ -366,7 +385,10 @@ public sealed class EnrollmentService
             claim.Key.ResultCreatedAt = enrollment.CreatedAt;
             await _unitOfWork.SaveChangesAsync(token);
 
-            return TransactionResult.Commit<EnrollResult>(new EnrollResult.Created(enrollment, pass.RemainingVisits));
+            return TransactionResult.Commit<EnrollResult>(new EnrollResult.Created(
+                enrollment,
+                pass.RemainingVisits,
+                new Dictionary<long, long> { [userId] = pass.Version }));
         }, ct);
     }
 

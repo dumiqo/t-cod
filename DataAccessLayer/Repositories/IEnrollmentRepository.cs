@@ -11,5 +11,7 @@ public interface IEnrollmentRepository : IGenericRepository<Enrollment>
 
     Task<EnrollmentCard?> GetCardAsync(long id, long userId, CancellationToken ct = default);
 
+    Task<VersionedCard?> GetVersionedCardAsync(long id, long userId, CancellationToken ct = default);
+
     Task<Enrollment?> FindOwnedAsync(long id, long userId, CancellationToken ct = default);
 }

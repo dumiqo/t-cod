@@ -35,6 +35,11 @@ public class EnrollmentRepository : GenericRepository<Enrollment>, IEnrollmentRe
 
     public async Task<EnrollmentCard?> GetCardAsync(long id, long userId, CancellationToken ct = default)
     {
+        return (await GetVersionedCardAsync(id, userId, ct))?.Card;
+    }
+
+    public async Task<VersionedCard?> GetVersionedCardAsync(long id, long userId, CancellationToken ct = default)
+    {
         var passes = _dbSet.GetService<ICurrentDbContext>().Context.Set<Pass>();
 
         // решение: бронь, занятие, зал и абонемент — одним SELECT: отдельные запросы при параллельной
@@ -42,7 +47,7 @@ public class EnrollmentRepository : GenericRepository<Enrollment>, IEnrollmentRe
         return await _dbSet
             .IgnoreQueryFilters()
             .Where(x => x.Id == id && x.UserId == userId)
-            .Join(passes, x => x.UserId, x => x.UserId, (x, pass) => new EnrollmentCard(
+            .Join(passes, x => x.UserId, x => x.UserId, (x, pass) => new VersionedCard(new EnrollmentCard(
                 x.Id,
                 x.Status,
                 x.Seats,
@@ -54,7 +59,7 @@ public class EnrollmentRepository : GenericRepository<Enrollment>, IEnrollmentRe
                     x.Class.DurationMinutes,
                     x.Class.IsCancelled,
                     new EnrollmentCardRoom(x.Class.Room.Id, x.Class.Room.Name)),
-                new EnrollmentCardPass(pass.RemainingVisits, pass.ValidUntil)))
+                new EnrollmentCardPass(pass.RemainingVisits, pass.ValidUntil)), pass.Version))
             .SingleOrDefaultAsync(ct);
     }
 }

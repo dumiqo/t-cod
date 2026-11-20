@@ -166,6 +166,76 @@ public class EnrollmentRepositoryTests
     }
 
     [TestMethod]
+    [DataRow(0L)]
+    [DataRow(7L)]
+    [DataRow(long.MaxValue)]
+    public async Task GetVersionedCardAsync_OwnEnrollment_ReturnsCardAndPassVersion(long version)
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var classId = await AddClassAsync(context);
+        var user = await context.Users.OrderBy(x => x.Id).FirstAsync();
+        var id = await AddOwnEnrollmentAsync(context, user.Id, classId, 3, "active");
+        await context.Passes.Where(x => x.UserId == user.Id).ExecuteUpdateAsync(x => x.SetProperty(p => p.Version, version));
+        var unitOfWork = new UnitOfWork(context);
+        var expected = await unitOfWork.Enrollment.GetCardAsync(id, user.Id);
+
+        var card = await unitOfWork.Enrollment.GetVersionedCardAsync(id, user.Id);
+
+        Assert.IsNotNull(expected);
+        Assert.AreEqual(new VersionedCard(expected, version), card);
+    }
+
+    [TestMethod]
+    public async Task GetVersionedCardAsync_OtherUsersEnrollment_ReturnsNull()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+        var classId = await AddClassAsync(context);
+        var users = await context.Users.OrderBy(x => x.Id).Select(x => x.Id).Take(2).ToListAsync();
+        var id = await AddOwnEnrollmentAsync(context, users[0], classId, 1, "active");
+
+        var card = await new UnitOfWork(context).Enrollment.GetVersionedCardAsync(id, users[1]);
+
+        Assert.IsNull(card);
+    }
+
+    [TestMethod]
+    public async Task GetVersionedCardAsync_Found_ExecutesExactlyOneCommand()
+    {
+        await using var db = await TestDb.CloneAsync();
+        long id;
+        long userId;
+        await using (var setup = db.CreateContext())
+        {
+            var classId = await AddClassAsync(setup);
+            userId = await setup.Users.OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();
+            id = await AddOwnEnrollmentAsync(setup, userId, classId, 2, "active");
+            await setup.Passes.Where(x => x.UserId == userId).ExecuteUpdateAsync(x => x.SetProperty(p => p.Version, 5L));
+        }
+
+        var counter = new CommandCounter();
+        await using var context = db.CreateContext(counter);
+
+        var card = await new UnitOfWork(context).Enrollment.GetVersionedCardAsync(id, userId);
+
+        Assert.AreEqual(id, card?.Card.Id);
+        Assert.AreEqual(5L, card?.Version);
+        Assert.AreEqual(1, counter.Count);
+    }
+
+    [TestMethod]
+    public async Task Seed_AllPasses_HaveVersionZero()
+    {
+        await using var db = await TestDb.CloneAsync();
+        await using var context = db.CreateContext();
+
+        var versions = await context.Passes.Select(x => x.Version).Distinct().ToListAsync();
+
+        CollectionAssert.AreEqual(new[] { 0L }, versions);
+    }
+
+    [TestMethod]
     [DataRow("active", false)]
     [DataRow("cancelled", false)]
     [DataRow("active", true)]

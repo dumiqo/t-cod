@@ -5,7 +5,7 @@ namespace WebApi.Enrollments;
 
 public abstract record ChangeSeatsResult
 {
-    public sealed record Changed(EnrollmentCard Card, int OldSeats, IReadOnlyList<PromotionOutcome> Promotions) : ChangeSeatsResult;
+    public sealed record Changed(EnrollmentCard Card, int OldSeats, IReadOnlyList<PromotionOutcome> Promotions, IReadOnlyDictionary<long, long> Versions) : ChangeSeatsResult;
 
     public sealed record NotFound : ChangeSeatsResult;
 

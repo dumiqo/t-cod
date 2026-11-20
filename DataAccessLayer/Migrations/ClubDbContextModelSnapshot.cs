@@ -205,6 +205,12 @@ namespace DataAccessLayer.Migrations
                         .HasColumnType("date")
                         .HasColumnName("valid_until");
 
+                    b.Property<long>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("version");
+
                     b.HasKey("Id");
 
                     b.HasIndex("UserId")
