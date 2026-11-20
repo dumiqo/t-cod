@@ -104,11 +104,11 @@
   - [20.6 Наблюдаемость](tasks/20.6-waitlist-observability.md) — готово (23823b2)
 - [21. Исследование: порядок продвижения](tasks/21-promotion-order.md) — готово (e76756d)
 - [22. Исследование: самопродвижение](tasks/22-self-promotion.md) — готово (5361faf)
-- [23. Продвижение очереди](tasks/23-waitlist-promotion.md)
-  - [23.1 Продвижение при отмене (§3)](tasks/23.1-promotion-on-cancel.md)
-  - [23.2 Продвижение при уменьшении мест (§2)](tasks/23.2-promotion-on-seats-decrease.md)
-  - [23.3 Гонки и взаимоблокировка](tasks/23.3-promotion-races.md)
-  - [23.4 Наблюдаемость](tasks/23.4-promotion-observability.md)
+- [23. Продвижение очереди](tasks/23-waitlist-promotion.md) — проработано
+  - [23.1 Продвижение при отмене (§3)](tasks/23.1-promotion-on-cancel.md) — проработано
+  - [23.2 Продвижение при уменьшении мест (§2)](tasks/23.2-promotion-on-seats-decrease.md) — проработано
+  - [23.3 Гонки и взаимоблокировка](tasks/23.3-promotion-races.md) — проработано
+  - [23.4 Наблюдаемость](tasks/23.4-promotion-observability.md) — проработано
 - [24. Исследование: отказ Redis](tasks/24-redis-failure.md)
 - [25. Исследование: кэш карточки](tasks/25-card-cache-research.md)
 - [26. Кэш карточки](tasks/26-card-cache.md)
