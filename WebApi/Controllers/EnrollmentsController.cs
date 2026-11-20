@@ -69,6 +69,7 @@ public class EnrollmentsController : ClubApiController
         {
             ChangeSeatsResult.Changed changed => Ok(EnrollmentCardResponse.From(changed.Card)),
             ChangeSeatsResult.NotFound => NotFound(),
+            ChangeSeatsResult.Rejected rejected => Reject(Operations.ChangeSeats, rejected.Reason),
             _ => throw new InvalidOperationException($"Unknown change seats result {result}.")
         };
     }

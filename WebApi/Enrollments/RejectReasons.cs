@@ -4,6 +4,8 @@ public static class RejectReasons
 {
     public const string IdempotencyKeyReused = "idempotency-key-reused";
 
+    public const string EnrollmentCancelled = "enrollment-cancelled";
+
     public const string ClassCancelled = "class-cancelled";
 
     public const string ClassStarted = "class-started";

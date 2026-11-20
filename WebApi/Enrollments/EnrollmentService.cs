@@ -139,18 +139,47 @@ public sealed class EnrollmentService
             return new ChangeSeatsResult.NotFound();
         }
 
+        // решение: отменённая бронь отклоняется без замков: cancelled — конечный статус, а enrollment-cancelled —
+        // первая причина шкалы, так что приоритет не меняется, а запрос не ждёт замок горячего занятия.
+        if (found.Status == EnrollmentStatuses.Cancelled)
+        {
+            return new ChangeSeatsResult.Rejected(RejectReasons.EnrollmentCancelled);
+        }
+
         return await _transactions.RunAsync<ChangeSeatsResult>(Operations.ChangeSeats, async token =>
         {
-            _ = await _unitOfWork.Class.LockIncludingCancelledAsync(found.ClassId, token)
+            var item = await _unitOfWork.Class.LockIncludingCancelledAsync(found.ClassId, token)
                 ?? throw new InvalidOperationException($"Class {found.ClassId} of enrollment {id} not found.");
 
             var enrollment = await _unitOfWork.Enrollment.GetByIdAsync(id, token)
                 ?? throw new InvalidOperationException($"Enrollment {id} disappeared.");
 
+            if (enrollment.Status == EnrollmentStatuses.Cancelled)
+            {
+                return TransactionResult.Rollback<ChangeSeatsResult>(new ChangeSeatsResult.Rejected(RejectReasons.EnrollmentCancelled));
+            }
+
+            if (item.IsCancelled)
+            {
+                return TransactionResult.Rollback<ChangeSeatsResult>(new ChangeSeatsResult.Rejected(RejectReasons.ClassCancelled));
+            }
+
             var pass = await _unitOfWork.Pass.LockByUserAsync(userId, token)
                 ?? throw new InvalidOperationException($"User {userId} has no pass.");
 
+            var now = _clock.GetUtcNow().UtcDateTime;
             var oldSeats = enrollment.Seats;
+            var diff = seats - oldSeats;
+            // решение: SumActiveSeatsAsync уже включает свою бронь, поэтому к занятым прибавляется разница, а не новое
+            // число мест; абонемент проверяется только при увеличении.
+            var reason = diff > 0
+                ? await CheckAsync(item, pass, diff, now, token)
+                : now >= item.StartsAt ? RejectReasons.ClassStarted : null;
+
+            if (reason is not null)
+            {
+                return TransactionResult.Rollback<ChangeSeatsResult>(new ChangeSeatsResult.Rejected(reason));
+            }
 
             if (seats != oldSeats)
             {
