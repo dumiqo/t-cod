@@ -9,6 +9,7 @@ using DataAccessLayer.UnitOfWork;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
@@ -18,6 +19,7 @@ using WebApi.Enrollments;
 using WebApi.Filters;
 using WebApi.Middleware;
 using WebApi.Observability;
+using WebApi.RateLimiting;
 using WebApi.Redis;
 using WebApi.Schedule;
 using WebApi.Waitlist;
@@ -32,7 +34,13 @@ builder.Host.UseDefaultServiceProvider(options =>
 
 // решение: число в кавычках — 400: веб-настройки System.Text.Json читают числа из строк, а в контракте поля числовые.
 builder.Services.AddControllers(options => options.Filters.Add<TransactionConflictFilter>())
-    .AddJsonOptions(options => options.JsonSerializerOptions.NumberHandling = JsonNumberHandling.Strict);
+    .AddJsonOptions(options => options.JsonSerializerOptions.NumberHandling = JsonNumberHandling.Strict)
+    // решение: описания 429 в ASP.NET 9 нет, без него фабрика ProblemDetails оставит type и title пустыми.
+    .ConfigureApiBehaviorOptions(options => options.ClientErrorMapping[StatusCodes.Status429TooManyRequests] = new ClientErrorData
+    {
+        Title = "Too Many Requests",
+        Link = "https://tools.ietf.org/html/rfc6585#section-4"
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddProblemDetails();
@@ -111,6 +119,7 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseAuthentication();
+app.UseMiddleware<RateLimitMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

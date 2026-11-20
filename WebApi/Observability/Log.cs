@@ -22,6 +22,13 @@ public static partial class Log
         long userId);
 
     [LoggerMessage(
+        EventId = 1003,
+        EventName = "RequestRateLimited",
+        Level = LogLevel.Information,
+        Message = "Request rate limited for user {UserId}, retry after {RetryAfter} s")]
+    public static partial void RequestRateLimited(ILogger logger, long userId, long retryAfter);
+
+    [LoggerMessage(
         EventId = 1004,
         EventName = "IdempotentReplay",
         Level = LogLevel.Information,

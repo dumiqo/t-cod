@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebApi.Observability;
+using WebApi.RateLimiting;
 
 namespace WebApi.Controllers;
 
 [Authorize]
+[RateLimited]
 public abstract class ClubApiController : BaseApiController
 {
     protected ObjectResult Reject(string operation, string reason)

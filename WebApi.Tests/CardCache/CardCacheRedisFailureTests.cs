@@ -44,8 +44,12 @@ public class CardCacheRedisFailureTests
         Assert.IsTrue(watch.Elapsed < TimeSpan.FromSeconds(1), $"elapsed {watch.Elapsed}");
         Assert.AreEqual(2, (int)card["seats"]!);
         Assert.AreEqual("active", (string)card["status"]!);
-        AssertFailures(app, ("connect", null), ("cache-get", typeof(RedisConnectionException)));
-        AssertFailureMetric(app, "cache-get");
+        AssertFailures(
+            app,
+            ("connect", null),
+            ("rate-limit", typeof(RedisConnectionException)),
+            ("cache-get", typeof(RedisConnectionException)));
+        AssertFailureMetric(app, "rate-limit", "cache-get");
     }
 
     [TestMethod]
@@ -72,8 +76,8 @@ public class CardCacheRedisFailureTests
         Assert.IsTrue(
             watch.Elapsed >= TimeSpan.FromMilliseconds(190) && watch.Elapsed < TimeSpan.FromMilliseconds(1200),
             $"elapsed {watch.Elapsed}");
-        AssertFailures(app, ("cache-get", typeof(TimeoutException)));
-        AssertFailureMetric(app, "cache-get");
+        AssertFailures(app, ("rate-limit", typeof(TimeoutException)), ("cache-get", typeof(TimeoutException)));
+        AssertFailureMetric(app, "rate-limit", "cache-get");
     }
 
     [TestMethod]
@@ -90,8 +94,8 @@ public class CardCacheRedisFailureTests
         var card = await CardAsync(client, id);
 
         Assert.AreEqual(5, (int)card["seats"]!);
-        AssertFailures(app, ("cache-get", typeof(RedisConnectionException)));
-        AssertFailureMetric(app, "cache-get");
+        AssertFailures(app, ("rate-limit", typeof(RedisConnectionException)), ("cache-get", typeof(RedisConnectionException)));
+        AssertFailureMetric(app, "rate-limit", "cache-get");
         app.RestoreRedis();
         var snapshot = JsonNode.Parse((string)(await app.Redis.HashGetAsync(Key(user), id.ToString()))!)!;
         Assert.AreEqual(2, (int)snapshot["Seats"]!);
@@ -133,11 +137,13 @@ public class CardCacheRedisFailureTests
             await AssertCancelledAsync(cancel, id, 2);
         }
 
-        AssertFailures(app, ("cache-remove", typeof(RedisConnectionException)));
+        AssertFailures(app, ("rate-limit", typeof(RedisConnectionException)), ("cache-remove", typeof(RedisConnectionException)));
         Assert.AreEqual("cancelled", (string)(await CardAsync(client, id))["status"]!);
         AssertFailures(
             app,
+            ("rate-limit", typeof(RedisConnectionException)),
             ("cache-remove", typeof(RedisConnectionException)),
+            ("rate-limit", typeof(RedisConnectionException)),
             ("cache-remove", typeof(RedisConnectionException)));
         app.RestoreRedis();
         await AssertHashAsync(app, user, "0", id);
@@ -147,9 +153,9 @@ public class CardCacheRedisFailureTests
         Assert.AreEqual("cancelled", (string)card["status"]!);
         Assert.AreEqual(12, (int)card["pass"]!["remainingVisits"]!);
         await AssertHashAsync(app, user, "1", id);
-        Assert.AreEqual(2, Failures(app).Count);
+        Assert.AreEqual(4, Failures(app).Count);
         CollectionAssert.AreEqual(
-            new[] { "cache-remove", "cache-remove" },
+            new[] { "rate-limit", "cache-remove", "rate-limit", "cache-remove" },
             app.Metrics("club.redis.failures").GetMeasurementSnapshot().Select(x => (string?)x.Tags["operation"]).ToArray());
     }
 
@@ -176,6 +182,7 @@ public class CardCacheRedisFailureTests
 
         AssertFailures(
             app,
+            ("rate-limit", typeof(RedisConnectionException)),
             ("cache-remove", typeof(RedisConnectionException)),
             ("cache-remove", typeof(RedisConnectionException)));
         app.RestoreRedis();
@@ -184,7 +191,7 @@ public class CardCacheRedisFailureTests
         Assert.AreEqual("cancelled", (string)(await CardAsync(client, id))["status"]!);
         await AssertHashAsync(app, owner, "1", id);
         await AssertHashAsync(app, waiter, "1", waiterOther);
-        Assert.AreEqual(2, Failures(app).Count);
+        Assert.AreEqual(3, Failures(app).Count);
     }
 
     [TestMethod]
@@ -294,12 +301,12 @@ public class CardCacheRedisFailureTests
         }
     }
 
-    private static void AssertFailureMetric(TestApp app, string operation)
+    private static void AssertFailureMetric(TestApp app, params string[] operations)
     {
-        var measurement = app.Metrics("club.redis.failures").GetMeasurementSnapshot().Single();
+        var measurements = app.Metrics("club.redis.failures").GetMeasurementSnapshot();
 
-        Assert.AreEqual(1, measurement.Value);
-        Assert.AreEqual(operation, measurement.Tags["operation"]);
+        CollectionAssert.AreEqual(operations, measurements.Select(x => (string?)x.Tags["operation"]).ToArray());
+        Assert.IsTrue(measurements.All(x => x.Value == 1));
     }
 
     private static async Task AssertHashAsync(TestApp app, TestUser user, string version, params long[] ids)
