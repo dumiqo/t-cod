@@ -111,11 +111,11 @@
   - [23.4 Наблюдаемость](tasks/23.4-promotion-observability.md) — готово (d17b39d)
 - [24. Исследование: отказ Redis](tasks/24-redis-failure.md) — готово (41a4819)
 - [25. Исследование: кэш карточки](tasks/25-card-cache-research.md) — готово (01e01bf)
-- [26. Кэш карточки](tasks/26-card-cache.md) — проработано
+- [26. Кэш карточки](tasks/26-card-cache.md) — готово (349039d)
   - [26.1 Версия абонемента](tasks/26.1-pass-version.md) — готово (da04f45)
   - [26.2 Кэш и сброс](tasks/26.2-card-cache-invalidation.md) — готово (089198a)
   - [26.3 Гонка заполнения и сброса](tasks/26.3-card-cache-fill-race.md) — готово (008d2c7)
-  - [26.4 Кэш при отказе Redis](tasks/26.4-card-cache-redis-failure.md) — проработано
+  - [26.4 Кэш при отказе Redis](tasks/26.4-card-cache-redis-failure.md) — готово (349039d)
 - [27. Исследование: окно ограничения частоты](tasks/27-rate-limit-window-research.md) — готово (9296fd6)
 - [28. Ограничение частоты](tasks/28-rate-limit.md) — проработано
   - [28.1 Ограничитель](tasks/28.1-rate-limiter.md) — проработано
