@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using WebApi.Idempotency;
 using WebApi.Tests.Enrollments;
 using WebApi.Tests.Infrastructure;
 using static WebApi.Tests.Waitlist.WaitlistApi;
@@ -191,6 +192,51 @@ public class JoinWaitlistRejectionTests
         CollectionAssert.AreEqual(before, await WaitlistSnapshotAsync(app, classId));
         await AssertSingleWaitingAsync(app, user, classId, 2);
         Assert.AreEqual(10, await EnrollApi.RemainingVisitsAsync(app, user));
+    }
+
+    [TestMethod]
+    public async Task Join_AlreadyWaitingWithNewKey_KeyNotTakenAndUsableAfterLeaving()
+    {
+        await using var app = await TestApp.StartAsync();
+        var user = await app.Data.UserAsync(remainingVisits: 10);
+        var classId = await FullClassAsync(app, capacity: 5);
+        using var client = await app.CreateClientAsync(user.Email);
+        var keyB = Guid.NewGuid().ToString();
+        using var first = await PostAsync(client, $"{{\"classId\":{classId},\"seats\":2}}", Guid.NewGuid().ToString());
+        Assert.AreEqual(HttpStatusCode.Created, first.StatusCode, await first.Content.ReadAsStringAsync());
+        using var firstBody = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var firstId = firstBody.RootElement.GetProperty("id").GetInt64();
+
+        using var rejected = await PostAsync(client, $"{{\"classId\":{classId},\"seats\":3}}", keyB);
+
+        await EnrollApi.AssertConflictAsync(rejected, "already-waiting");
+        var hashB = IdempotencyKeyHash.Compute(keyB);
+        await using (var context = app.CreateContext())
+        {
+            Assert.AreEqual(1, await context.IdempotencyKeys.CountAsync(x => x.UserId == user.Id));
+            Assert.IsFalse(await context.IdempotencyKeys.AnyAsync(x => x.KeyHash == hashB));
+        }
+
+        Assert.AreEqual(1, JoinedEvents(app).Count);
+        Assert.AreEqual(2, EnrollApi.MetricSum(app, "club.waitlist.joined"));
+
+        using (var left = await client.PostAsync($"/enrollments/waitlist/{firstId}/cancel", null))
+        {
+            Assert.AreEqual(HttpStatusCode.OK, left.StatusCode, await left.Content.ReadAsStringAsync());
+        }
+
+        using var retried = await PostAsync(client, $"{{\"classId\":{classId},\"seats\":3}}", keyB);
+
+        var text = await retried.Content.ReadAsStringAsync();
+        Assert.AreEqual(HttpStatusCode.Created, retried.StatusCode, text);
+        using var body = JsonDocument.Parse(text);
+        var id = body.RootElement.GetProperty("id").GetInt64();
+        Assert.AreNotEqual(firstId, id);
+        Assert.AreEqual(3, body.RootElement.GetProperty("seats").GetInt32());
+        await AssertSingleWaitingAsync(app, user, classId, 3);
+        await using var after = app.CreateContext();
+        var key = await after.IdempotencyKeys.SingleAsync(x => x.KeyHash == hashB);
+        Assert.AreEqual(id, key.ResultId);
     }
 
     [TestMethod]

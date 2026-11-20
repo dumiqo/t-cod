@@ -17,14 +17,14 @@ public sealed class TestData
         _app = app;
     }
 
-    public async Task<TestUser> UserAsync(int remainingVisits = 10, DateOnly? validUntil = null)
+    public async Task<TestUser> UserAsync(int remainingVisits = 10, DateOnly? validUntil = null, string role = "user")
     {
         var now = _app.Clock.GetUtcNow().UtcDateTime;
         var user = new User
         {
             Email = $"test-{Guid.NewGuid():N}@club.test",
             PasswordHash = PasswordHash,
-            Role = "user",
+            Role = role,
             CreatedAt = now
         };
 
