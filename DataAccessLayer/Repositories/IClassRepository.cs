@@ -10,4 +10,6 @@ public interface IClassRepository : IGenericRepository<Class>
     Task<Class?> LockIncludingCancelledAsync(long id, CancellationToken ct = default);
 
     Task<List<ScheduleRow>> GetSchedulePageAsync(ScheduleQuery query, long userId, CancellationToken ct = default);
+
+    Task<List<RoomLoadRow>> GetRoomLoadAsync(DateTime from, DateTime toExclusive, long? roomId, CancellationToken ct = default);
 }

@@ -53,4 +53,29 @@ public class ClassRepository : GenericRepository<Class>, IClassRepository
                 x.Enrollments.Where(e => e.Status == EnrollmentStatuses.Active && e.UserId == userId).Sum(e => (long)e.Seats)))
             .ToListAsync(ct);
     }
+
+    public async Task<List<RoomLoadRow>> GetRoomLoadAsync(DateTime from, DateTime toExclusive, long? roomId, CancellationToken ct = default)
+    {
+        var classes = _dbSet.Where(x => x.StartsAt >= from && x.StartsAt < toExclusive);
+
+        if (roomId is { } id)
+        {
+            classes = classes.Where(x => x.RoomId == id);
+        }
+
+        return await classes
+            .Select(x => new
+            {
+                Date = DateOnly.FromDateTime(x.StartsAt),
+                x.RoomId,
+                RoomName = x.Room.Name,
+                Capacity = (long)x.Capacity,
+                Booked = x.Enrollments.Where(e => e.Status == EnrollmentStatuses.Active).Sum(e => (long)e.Seats)
+            })
+            .GroupBy(x => new { x.Date, x.RoomId, x.RoomName })
+            .OrderBy(x => x.Key.Date)
+            .ThenBy(x => x.Key.RoomId)
+            .Select(x => new RoomLoadRow(x.Key.Date, x.Key.RoomId, x.Key.RoomName, x.Count(), x.Sum(c => c.Capacity), x.Sum(c => c.Booked)))
+            .ToListAsync(ct);
+    }
 }

@@ -22,6 +22,18 @@ public static class RoomLoadApi
         return value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 
+    public static object Item(DateTime date, long roomId, string roomName, int classesCount, int totalCapacity, int bookedSeats)
+    {
+        return new
+        {
+            date = Date(date),
+            room = new { id = roomId, name = roomName },
+            classesCount,
+            totalCapacity,
+            bookedSeats
+        };
+    }
+
     public static async Task AssertItemsAsync(HttpResponseMessage response, params object[] items)
     {
         var text = await response.Content.ReadAsStringAsync();
