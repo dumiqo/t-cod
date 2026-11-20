@@ -102,7 +102,7 @@
   - [20.4 Идемпотентность §7](tasks/20.4-join-idempotency.md) — готово (d780516)
   - [20.5 Конкурентность и часы](tasks/20.5-waitlist-concurrency.md) — готово (cc1e3a7)
   - [20.6 Наблюдаемость](tasks/20.6-waitlist-observability.md) — готово (23823b2)
-- [21. Исследование: порядок продвижения](tasks/21-promotion-order.md)
+- [21. Исследование: порядок продвижения](tasks/21-promotion-order.md) — готово (e76756d)
 - [22. Исследование: самопродвижение](tasks/22-self-promotion.md)
 - [23. Продвижение очереди](tasks/23-waitlist-promotion.md)
   - [23.1 Продвижение при отмене (§3)](tasks/23.1-promotion-on-cancel.md)
