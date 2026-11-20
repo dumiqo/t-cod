@@ -323,7 +323,7 @@ public class PromotionOnCancelTests
         Assert.AreEqual(5, await RemainingVisitsAsync(app, waiter));
     }
 
-    private static async Task<string[]> QueueAsync(TestApp app, params long[] ids)
+    internal static async Task<string[]> QueueAsync(TestApp app, params long[] ids)
     {
         await using var context = app.CreateContext();
         var entries = await context.WaitlistEntries.AsNoTracking().Where(x => ids.Contains(x.Id)).ToDictionaryAsync(x => x.Id);

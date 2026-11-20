@@ -169,7 +169,10 @@ public sealed class EnrollmentService
                 return TransactionResult.Rollback<ChangeSeatsResult>(new ChangeSeatsResult.Rejected(RejectReasons.ClassCancelled));
             }
 
-            var pass = await _unitOfWork.Pass.LockByUserAsync(userId, token)
+            // решение: очередь читается только при уменьшении: то же число мест и увеличение простаивающие места не раздают.
+            var queue = seats < enrollment.Seats ? await _unitOfWork.Waitlist.GetWaitingAsync(item.Id, token) : [];
+            var passes = await _unitOfWork.Pass.LockByUsersAsync([userId, .. queue.Select(x => x.UserId)], token);
+            var pass = passes.SingleOrDefault(x => x.UserId == userId)
                 ?? throw new InvalidOperationException($"User {userId} has no pass.");
 
             var now = _clock.GetUtcNow().UtcDateTime;
@@ -193,6 +196,7 @@ public sealed class EnrollmentService
                 pass.RemainingVisits -= seats - oldSeats;
                 enrollment.Seats = seats;
                 await _unitOfWork.SaveChangesAsync(token);
+                await PromoteAsync(item, queue, passes, userId, now, token);
             }
 
             // решение: карточка читается под замками до коммита: в ней ровно результат операции.
