@@ -109,7 +109,7 @@
   - [23.2 Продвижение при уменьшении мест (§2)](tasks/23.2-promotion-on-seats-decrease.md) — проработано
   - [23.3 Гонки и взаимоблокировка](tasks/23.3-promotion-races.md) — проработано
   - [23.4 Наблюдаемость](tasks/23.4-promotion-observability.md) — проработано
-- [24. Исследование: отказ Redis](tasks/24-redis-failure.md)
+- [24. Исследование: отказ Redis](tasks/24-redis-failure.md) — готово (41a4819)
 - [25. Исследование: кэш карточки](tasks/25-card-cache-research.md)
 - [26. Кэш карточки](tasks/26-card-cache.md)
   - [26.1 Кэш и сброс](tasks/26.1-card-cache-invalidation.md)
