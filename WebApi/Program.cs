@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
 using WebApi.Auth;
+using WebApi.CardCache;
 using WebApi.Enrollments;
 using WebApi.Filters;
 using WebApi.Middleware;
@@ -56,6 +57,14 @@ builder.Services.AddOptions<TransactionSettings>()
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")!));
+
+builder.Services.AddOptions<CardCacheSettings>()
+    .BindConfiguration(CardCacheSettings.Section)
+    .Validate(
+        x => x.CardTtl >= TimeSpan.FromSeconds(1) && x.CardTtl <= TimeSpan.FromHours(1),
+        "Cache:CardTtl must be at least 1 s and at most 1 h.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<ICardCache, CardCache>();
 
 builder.Services.AddSingleton<ICacheService>(provider =>
     new RedisCacheService(provider.GetRequiredService<IConnectionMultiplexer>(), TimeSpan.FromMinutes(5)));

@@ -2,6 +2,7 @@ using DataAccessLayer.Entities;
 using DataAccessLayer.Repositories;
 using DataAccessLayer.Transactions;
 using DataAccessLayer.UnitOfWork;
+using WebApi.CardCache;
 using WebApi.Idempotency;
 using WebApi.Observability;
 using WebApi.Time;
@@ -18,19 +19,22 @@ public sealed class EnrollmentService
     private readonly TimeProvider _clock;
     private readonly ILogger<EnrollmentService> _logger;
     private readonly ClubMetrics _metrics;
+    private readonly ICardCache _cache;
 
     public EnrollmentService(
         IUnitOfWork unitOfWork,
         TransactionRunner transactions,
         TimeProvider clock,
         ILogger<EnrollmentService> logger,
-        ClubMetrics metrics)
+        ClubMetrics metrics,
+        ICardCache cache)
     {
         _unitOfWork = unitOfWork;
         _transactions = transactions;
         _clock = clock;
         _logger = logger;
         _metrics = metrics;
+        _cache = cache;
     }
 
     public async Task<EnrollResult> EnrollAsync(long userId, long classId, int seats, string idempotencyKey, CancellationToken ct)
@@ -43,6 +47,7 @@ public sealed class EnrollmentService
             Log.EnrollmentCreated(_logger, created.Enrollment.Id, classId, seats, userId, created.RemainingVisits);
             _metrics.EnrollmentCreated(seats);
             _metrics.VisitsCharged(seats);
+            await InvalidateAsync(created.Versions);
         }
 
         if (result is EnrollResult.Replayed replayed)
@@ -54,9 +59,25 @@ public sealed class EnrollmentService
         return result;
     }
 
-    public Task<EnrollmentCard?> GetCardAsync(long userId, long id, CancellationToken ct)
+    public async Task<EnrollmentCard?> GetCardAsync(long userId, long id, CancellationToken ct)
     {
-        return _unitOfWork.Enrollment.GetCardAsync(id, userId, ct);
+        var cached = await _cache.GetAsync(userId, id);
+
+        if (cached is not null)
+        {
+            return cached;
+        }
+
+        var versioned = await _unitOfWork.Enrollment.GetVersionedCardAsync(id, userId, ct);
+
+        if (versioned is null)
+        {
+            return null;
+        }
+
+        await _cache.FillAsync(userId, versioned);
+
+        return versioned.Card;
     }
 
     public async Task<CancelResult> CancelAsync(long userId, long id, CancellationToken ct)
@@ -133,6 +154,7 @@ public sealed class EnrollmentService
             }
 
             ObservePromotions(cancelled.ClassId, cancelled.Promotions);
+            await InvalidateAsync(cancelled.Versions);
         }
 
         return result;
@@ -216,7 +238,7 @@ public sealed class EnrollmentService
                 seats == oldSeats ? new Dictionary<long, long>() : Versions(passes, userId, promotions)));
         }, ct);
 
-        if (result is ChangeSeatsResult.Changed { Card: var changed, OldSeats: var old, Promotions: var promoted })
+        if (result is ChangeSeatsResult.Changed { Card: var changed, OldSeats: var old, Promotions: var promoted, Versions: var versions })
         {
             var remaining = changed.Pass.RemainingVisits;
 
@@ -232,9 +254,18 @@ public sealed class EnrollmentService
             }
 
             ObservePromotions(changed.Class.Id, promoted);
+            await InvalidateAsync(versions);
         }
 
         return result;
+    }
+
+    private async Task InvalidateAsync(IReadOnlyDictionary<long, long> versions)
+    {
+        foreach (var (userId, version) in versions)
+        {
+            await _cache.InvalidateAsync(userId, version);
+        }
     }
 
     private void ObservePromotions(long classId, IReadOnlyList<PromotionOutcome> promotions)
