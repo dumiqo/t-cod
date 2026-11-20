@@ -30,6 +30,29 @@ public class TimeExtensionsTests
     }
 
     [TestMethod]
+    [DataRow(1L, 10L)]
+    [DataRow(9L, 10L)]
+    [DataRow(10L, 10L)]
+    [DataRow(11L, 20L)]
+    [DataRow(0L, 0L)]
+    [DataRow(9999991L, 10000000L)]
+    public void CeilingToMicroseconds_RoundsTicksUpToMicrosecond(long ticks, long expected)
+    {
+        var second = new DateTime(2026, 11, 19, 10, 0, 0, DateTimeKind.Utc);
+
+        var rounded = second.AddTicks(ticks).CeilingToMicroseconds();
+
+        Assert.AreEqual(second.AddTicks(expected), rounded);
+        Assert.AreEqual(DateTimeKind.Utc, rounded.Kind);
+    }
+
+    [TestMethod]
+    public void CeilingToMicroseconds_MaxValue_StaysMaxValue()
+    {
+        Assert.AreEqual(DateTime.MaxValue, DateTime.MaxValue.CeilingToMicroseconds());
+    }
+
+    [TestMethod]
     public void TruncateToMicroseconds_MaxValue_DoesNotOverflow()
     {
         Assert.AreEqual(

@@ -8,4 +8,6 @@ public interface IClassRepository : IGenericRepository<Class>
     Task<Class?> GetWithEnrollmentsAsync(long id, CancellationToken ct = default);
 
     Task<Class?> LockIncludingCancelledAsync(long id, CancellationToken ct = default);
+
+    Task<List<ScheduleRow>> GetSchedulePageAsync(ScheduleQuery query, CancellationToken ct = default);
 }

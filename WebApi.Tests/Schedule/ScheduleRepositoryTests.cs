@@ -1,0 +1,132 @@
+using DataAccessLayer;
+using DataAccessLayer.Entities;
+using DataAccessLayer.Repositories;
+using DataAccessLayer.UnitOfWork;
+using WebApi.Tests.Infrastructure;
+
+namespace WebApi.Tests.Schedule;
+
+[TestClass]
+public class ScheduleRepositoryTests
+{
+    [TestMethod]
+    public async Task GetSchedulePageAsync_Period_ReturnsRowsInHalfOpenRangeOrderedByStartsAtAndId()
+    {
+        await using var db = await TestDb.CloneAsync();
+        var from = db.SeededAt.UtcDateTime.Date.AddDays(400).AddTicks(50);
+        var to = from.AddHours(1);
+        await using var context = db.CreateContext();
+        var room = await RoomAsync(context, "Hall");
+        var late = await ClassAsync(context, room, to.AddTicks(-10));
+        await ClassAsync(context, room, to);
+        var sameFirst = await ClassAsync(context, room, from.AddMinutes(5));
+        var sameSecond = await ClassAsync(context, room, from.AddMinutes(5));
+        var atFrom = await ClassAsync(context, room, from);
+        await ClassAsync(context, room, from.AddTicks(-10));
+
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, to, null, 10));
+
+        CollectionAssert.AreEqual(
+            new[] { atFrom.Id, sameFirst.Id, sameSecond.Id, late.Id },
+            rows.Select(x => x.Id).ToArray());
+    }
+
+    [TestMethod]
+    public async Task GetSchedulePageAsync_Row_HasClassAndRoomFields()
+    {
+        await using var db = await TestDb.CloneAsync();
+        var from = db.SeededAt.UtcDateTime.Date.AddDays(400);
+        await using var context = db.CreateContext();
+        var room = await RoomAsync(context, "Pool");
+        var item = await ClassAsync(context, room, from.AddTicks(1234560), title: "Swim", durationMinutes: 45, capacity: 7);
+
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), null, 10));
+
+        Assert.AreEqual(1, rows.Count);
+        Assert.AreEqual(new ScheduleRow(item.Id, "Swim", from.AddTicks(1234560), 45, 7, room.Id, "Pool"), rows[0]);
+    }
+
+    [TestMethod]
+    public async Task GetSchedulePageAsync_CancelledClass_IsNotReturned()
+    {
+        await using var db = await TestDb.CloneAsync();
+        var from = db.SeededAt.UtcDateTime.Date.AddDays(400);
+        await using var context = db.CreateContext();
+        var room = await RoomAsync(context, "Hall");
+        await ClassAsync(context, room, from.AddHours(1), cancelled: true);
+        var active = await ClassAsync(context, room, from.AddHours(2));
+
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), null, 10));
+
+        CollectionAssert.AreEqual(new[] { active.Id }, rows.Select(x => x.Id).ToArray());
+    }
+
+    [TestMethod]
+    public async Task GetSchedulePageAsync_RoomFilter_ReturnsOnlyThatRoom()
+    {
+        await using var db = await TestDb.CloneAsync();
+        var from = db.SeededAt.UtcDateTime.Date.AddDays(400);
+        await using var context = db.CreateContext();
+        var hall = await RoomAsync(context, "Hall");
+        var pool = await RoomAsync(context, "Pool");
+        var inHall = await ClassAsync(context, hall, from.AddHours(1));
+        await ClassAsync(context, pool, from.AddHours(2));
+
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), hall.Id, 10));
+
+        CollectionAssert.AreEqual(new[] { inHall.Id }, rows.Select(x => x.Id).ToArray());
+    }
+
+    [TestMethod]
+    [DataRow(1)]
+    [DataRow(2)]
+    public async Task GetSchedulePageAsync_Take_ReturnsExactlyThatManyFirstRows(int take)
+    {
+        await using var db = await TestDb.CloneAsync();
+        var from = db.SeededAt.UtcDateTime.Date.AddDays(400);
+        await using var context = db.CreateContext();
+        var room = await RoomAsync(context, "Hall");
+        var third = await ClassAsync(context, room, from.AddHours(3));
+        var first = await ClassAsync(context, room, from.AddHours(1));
+        var second = await ClassAsync(context, room, from.AddHours(2));
+
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(new ScheduleQuery(from, from.AddDays(1), null, take));
+
+        CollectionAssert.AreEqual(
+            new[] { first.Id, second.Id, third.Id }.Take(take).ToArray(),
+            rows.Select(x => x.Id).ToArray());
+    }
+
+    private static async Task<Room> RoomAsync(ClubDbContext context, string name)
+    {
+        var room = new Room { Name = name };
+        context.Rooms.Add(room);
+        await context.SaveChangesAsync();
+
+        return room;
+    }
+
+    private static async Task<Class> ClassAsync(
+        ClubDbContext context,
+        Room room,
+        DateTime startsAt,
+        bool cancelled = false,
+        string title = "Test class",
+        int durationMinutes = 60,
+        int capacity = 10)
+    {
+        var item = new Class
+        {
+            RoomId = room.Id,
+            Title = title,
+            StartsAt = startsAt,
+            DurationMinutes = durationMinutes,
+            Capacity = capacity,
+            IsCancelled = cancelled
+        };
+        context.Classes.Add(item);
+        await context.SaveChangesAsync();
+
+        return item;
+    }
+}

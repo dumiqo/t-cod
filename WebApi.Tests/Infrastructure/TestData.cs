@@ -43,16 +43,32 @@ public sealed class TestData
         return new TestUser(user.Id, user.Email);
     }
 
-    public async Task<long> ClassAsync(int capacity = 10, DateTime? startsAt = null, bool cancelled = false)
+    public async Task<long> RoomAsync(string name)
+    {
+        var room = new Room { Name = name };
+
+        await using var context = _app.CreateContext();
+        context.Rooms.Add(room);
+        await context.SaveChangesAsync();
+
+        return room.Id;
+    }
+
+    public async Task<long> ClassAsync(
+        int capacity = 10,
+        DateTime? startsAt = null,
+        bool cancelled = false,
+        long? roomId = null,
+        string title = "Test class",
+        int durationMinutes = 60)
     {
         await using var context = _app.CreateContext();
-        var roomId = await context.Rooms.OrderBy(x => x.Id).Select(x => x.Id).FirstAsync();
         var item = new Class
         {
-            RoomId = roomId,
-            Title = "Test class",
+            RoomId = roomId ?? await context.Rooms.OrderBy(x => x.Id).Select(x => x.Id).FirstAsync(),
+            Title = title,
             StartsAt = startsAt ?? _app.Clock.GetUtcNow().UtcDateTime.AddDays(1),
-            DurationMinutes = 60,
+            DurationMinutes = durationMinutes,
             Capacity = capacity,
             IsCancelled = cancelled
         };

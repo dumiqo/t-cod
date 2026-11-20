@@ -82,7 +82,7 @@ public class QueryBindingTests
         await AssertSingleErrorAsync(response, "to", "The to field is required.");
     }
 
-    private static async Task AssertSingleErrorAsync(HttpResponseMessage response, string key, string message)
+    internal static async Task AssertSingleErrorAsync(HttpResponseMessage response, string key, string message)
     {
         var text = await response.Content.ReadAsStringAsync();
 

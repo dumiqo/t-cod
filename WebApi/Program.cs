@@ -17,6 +17,7 @@ using WebApi.Enrollments;
 using WebApi.Filters;
 using WebApi.Middleware;
 using WebApi.Observability;
+using WebApi.Schedule;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,6 +42,7 @@ builder.Services.AddDbContext<ClubDbContext>(options =>
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<TransactionRunner>();
 builder.Services.AddScoped<EnrollmentService>();
+builder.Services.AddScoped<ScheduleService>();
 // решение: lock_timeout — от 1 мс (Postgres считает в целых мс, 0 — без предела) и меньше 30 с
 // (CommandTimeout Npgsql прервал бы ожидание раньше, и вместо 503 был бы 500).
 builder.Services.AddOptions<TransactionSettings>()

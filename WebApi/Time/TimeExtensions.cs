@@ -8,4 +8,11 @@ public static class TimeExtensions
     {
         return new DateTime(value.Ticks - value.Ticks % TimeSpan.TicksPerMicrosecond, value.Kind);
     }
+
+    public static DateTime CeilingToMicroseconds(this DateTime value)
+    {
+        var up = (TimeSpan.TicksPerMicrosecond - value.Ticks % TimeSpan.TicksPerMicrosecond) % TimeSpan.TicksPerMicrosecond;
+
+        return new DateTime(Math.Min(value.Ticks + up, DateTime.MaxValue.Ticks), value.Kind);
+    }
 }
