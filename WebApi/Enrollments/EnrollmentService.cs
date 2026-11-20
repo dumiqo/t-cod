@@ -10,6 +10,8 @@ namespace WebApi.Enrollments;
 
 public sealed class EnrollmentService
 {
+    private static readonly TimeSpan RefundWindow = TimeSpan.FromHours(2);
+
     private readonly IUnitOfWork _unitOfWork;
     private readonly TransactionRunner _transactions;
     private readonly TimeProvider _clock;
@@ -74,7 +76,7 @@ public sealed class EnrollmentService
 
         return await _transactions.RunAsync<CancelResult>(Operations.CancelEnrollment, async token =>
         {
-            _ = await _unitOfWork.Class.LockIncludingCancelledAsync(found.ClassId, token)
+            var item = await _unitOfWork.Class.LockIncludingCancelledAsync(found.ClassId, token)
                 ?? throw new InvalidOperationException($"Class {found.ClassId} of enrollment {id} not found.");
 
             var enrollment = await _unitOfWork.Enrollment.GetByIdAsync(id, token)
@@ -89,11 +91,21 @@ public sealed class EnrollmentService
                 ?? throw new InvalidOperationException($"User {userId} has no pass.");
 
             var now = _clock.GetUtcNow().UtcDateTime;
-            var refundedVisits = enrollment.Seats;
+
+            if (!item.IsCancelled && now >= item.StartsAt)
+            {
+                return TransactionResult.Rollback<CancelResult>(new CancelResult.Rejected(RejectReasons.ClassStarted));
+            }
+
+            // решение: правила сверяются по сырому now, а cancelled_at — усечённый now: на тик ближе двух часов
+            // возврата нет, даже если cancelled_at в базе равен startsAt − 2h.
+            var refundedVisits = item.IsCancelled || item.StartsAt - now >= RefundWindow ? enrollment.Seats : 0;
 
             enrollment.Status = EnrollmentStatuses.Cancelled;
             enrollment.CancelledAt = now.TruncateToMicroseconds();
             enrollment.RefundedVisits = refundedVisits;
+            // решение: переполнение остатка (пополнили мимо API) не проверяется: отрицательную сумму ловит
+            // CHECK remaining_visits >= 0, ответ 500 и откат; своя причина 409 сломала бы контракт.
             pass.RemainingVisits += refundedVisits;
 
             await _unitOfWork.SaveChangesAsync(token);
