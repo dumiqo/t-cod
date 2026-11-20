@@ -74,7 +74,7 @@ public sealed class EnrollmentService
             return Repeat(found);
         }
 
-        return await _transactions.RunAsync<CancelResult>(Operations.CancelEnrollment, async token =>
+        var result = await _transactions.RunAsync<CancelResult>(Operations.CancelEnrollment, async token =>
         {
             var item = await _unitOfWork.Class.LockIncludingCancelledAsync(found.ClassId, token)
                 ?? throw new InvalidOperationException($"Class {found.ClassId} of enrollment {id} not found.");
@@ -111,8 +111,23 @@ public sealed class EnrollmentService
             await _unitOfWork.SaveChangesAsync(token);
 
             return TransactionResult.Commit<CancelResult>(
-                new CancelResult.Cancelled(enrollment.Id, refundedVisits, pass.RemainingVisits, false));
+                new CancelResult.Cancelled(enrollment.Id, item.Id, enrollment.Seats, refundedVisits, pass.RemainingVisits, false));
         }, ct);
+
+        if (result is CancelResult.Cancelled { Repeated: false, RemainingVisits: { } remaining } cancelled)
+        {
+            if (cancelled.RefundedVisits > 0)
+            {
+                Log.EnrollmentCancelled(_logger, id, cancelled.ClassId, cancelled.Seats, userId, cancelled.RefundedVisits, remaining);
+                _metrics.VisitsRefunded(cancelled.RefundedVisits);
+            }
+            else
+            {
+                Log.EnrollmentCancelledWithoutRefund(_logger, id, cancelled.ClassId, cancelled.Seats, userId, remaining);
+            }
+        }
+
+        return result;
     }
 
     private static CancelResult Repeat(Enrollment enrollment)
@@ -120,7 +135,7 @@ public sealed class EnrollmentService
         var refundedVisits = enrollment.RefundedVisits
             ?? throw new InvalidOperationException($"Enrollment {enrollment.Id} is cancelled without refunded visits.");
 
-        return new CancelResult.Cancelled(enrollment.Id, refundedVisits, null, true);
+        return new CancelResult.Cancelled(enrollment.Id, enrollment.ClassId, enrollment.Seats, refundedVisits, null, true);
     }
 
     private Task<EnrollResult> EnrollInTransactionAsync(long userId, long classId, int seats, byte[] keyHash, CancellationToken ct)

@@ -147,6 +147,7 @@ public class TestAppTests
         Assert.AreEqual(0, other.Metrics("club.requests.rejected").GetMeasurementSnapshot().Count);
         Assert.AreEqual(0, app.Metrics("club.enrollments.created").GetMeasurementSnapshot().Count);
         Assert.AreEqual(0, app.Metrics("club.visits.charged").GetMeasurementSnapshot().Count);
+        Assert.AreEqual(0, app.Metrics("club.visits.refunded").GetMeasurementSnapshot().Count);
     }
 
     [TestMethod]

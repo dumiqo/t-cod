@@ -40,6 +40,7 @@ public class CancelEnrollmentConcurrencyTests
         Assert.AreEqual(3, enrollment.RefundedVisits);
         Assert.AreEqual(Now(app), enrollment.CancelledAt);
         Assert.AreEqual(7, await RemainingVisitsAsync(app, user));
+        AssertRefundObservedOnce(app, 3);
     }
 
     [TestMethod]
@@ -180,7 +181,19 @@ public class CancelEnrollmentConcurrencyTests
         Assert.AreEqual(3, enrollment.RefundedVisits);
         Assert.AreEqual(Now(app), enrollment.CancelledAt);
         Assert.AreEqual(7, await RemainingVisitsAsync(app, user));
+        AssertRefundObservedOnce(app, 3);
         DisposeAll(responses);
+    }
+
+    private static void AssertRefundObservedOnce(TestApp app, int visits)
+    {
+        var events = RefundedEvents(app);
+        Assert.AreEqual(1, events.Count);
+        Assert.AreEqual(visits.ToString(), events[0].GetStructuredStateValue("RefundedVisits"));
+        Assert.AreEqual(0, NotRefundedEvents(app).Count);
+        var measurements = app.Metrics("club.visits.refunded").GetMeasurementSnapshot();
+        Assert.AreEqual(1, measurements.Count);
+        Assert.AreEqual(visits, measurements[0].Value);
     }
 
     private static DateTime Now(TestApp app)

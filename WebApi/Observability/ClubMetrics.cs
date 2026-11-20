@@ -10,6 +10,7 @@ public sealed class ClubMetrics
     private readonly Counter<long> _enrollmentsCreated;
     private readonly Counter<long> _visitsCharged;
     private readonly Counter<long> _idempotencyReplayed;
+    private readonly Counter<long> _visitsRefunded;
 
     public ClubMetrics(IMeterFactory meterFactory)
     {
@@ -19,6 +20,12 @@ public sealed class ClubMetrics
         _enrollmentsCreated = meter.CreateCounter<long>("club.enrollments.created");
         _visitsCharged = meter.CreateCounter<long>("club.visits.charged");
         _idempotencyReplayed = meter.CreateCounter<long>("club.idempotency.replayed");
+        _visitsRefunded = meter.CreateCounter<long>("club.visits.refunded");
+    }
+
+    public void VisitsRefunded(int visits)
+    {
+        _visitsRefunded.Add(visits);
     }
 
     public void IdempotencyReplayed(string operation)

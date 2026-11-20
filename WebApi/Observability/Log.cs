@@ -40,4 +40,31 @@ public static partial class Log
         int seats,
         long userId,
         int remainingVisits);
+
+    [LoggerMessage(
+        EventId = 2002,
+        EventName = "EnrollmentCancelled",
+        Level = LogLevel.Information,
+        Message = "Enrollment cancelled: {EnrollmentId} class {ClassId} seats {Seats} for user {UserId}, refunded {RefundedVisits}, remaining {RemainingVisits}")]
+    public static partial void EnrollmentCancelled(
+        ILogger logger,
+        long enrollmentId,
+        long classId,
+        int seats,
+        long userId,
+        int refundedVisits,
+        int remainingVisits);
+
+    [LoggerMessage(
+        EventId = 2003,
+        EventName = "EnrollmentCancelledWithoutRefund",
+        Level = LogLevel.Information,
+        Message = "Enrollment cancelled without refund: {EnrollmentId} class {ClassId} seats {Seats} for user {UserId}, remaining {RemainingVisits}")]
+    public static partial void EnrollmentCancelledWithoutRefund(
+        ILogger logger,
+        long enrollmentId,
+        long classId,
+        int seats,
+        long userId,
+        int remainingVisits);
 }

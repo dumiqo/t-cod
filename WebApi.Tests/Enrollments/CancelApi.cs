@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DataAccessLayer.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Testing;
 using WebApi.Tests.Infrastructure;
 
 namespace WebApi.Tests.Enrollments;
@@ -67,5 +68,21 @@ public static class CancelApi
         Assert.IsNull(enrollment.CancelledAt);
         Assert.IsNull(enrollment.RefundedVisits);
         Assert.AreEqual(remainingVisits, await EnrollApi.RemainingVisitsAsync(app, user));
+        var refunded = RefundedEvents(app);
+        var userId = user.Id.ToString();
+        Assert.IsFalse(refunded.Concat(NotRefundedEvents(app)).Any(x => x.GetStructuredStateValue("UserId") == userId));
+        Assert.AreEqual(
+            refunded.Sum(x => long.Parse(x.GetStructuredStateValue("RefundedVisits") ?? string.Empty)),
+            EnrollApi.MetricSum(app, "club.visits.refunded"));
+    }
+
+    public static IReadOnlyList<FakeLogRecord> RefundedEvents(TestApp app)
+    {
+        return app.Logs.GetSnapshot().Where(x => x.Id.Id == 2002).ToList();
+    }
+
+    public static IReadOnlyList<FakeLogRecord> NotRefundedEvents(TestApp app)
+    {
+        return app.Logs.GetSnapshot().Where(x => x.Id.Id == 2003).ToList();
     }
 }

@@ -16,6 +16,7 @@ public sealed class TestApp : IAsyncDisposable
     [
         "club.enrollments.created",
         "club.visits.charged",
+        "club.visits.refunded",
         "club.requests.rejected",
         "club.idempotency.replayed"
     ];
