@@ -35,6 +35,13 @@ public class ClassRepository : GenericRepository<Class>, IClassRepository
             classes = classes.Where(x => x.RoomId == roomId);
         }
 
+        if (query.After is { } after)
+        {
+            classes = classes.Where(x => EF.Functions.GreaterThan(
+                ValueTuple.Create(x.StartsAt, x.Id),
+                ValueTuple.Create(after.StartsAt, after.Id)));
+        }
+
         return await classes
             .OrderBy(x => x.StartsAt)
             // решение: id — второй ключ: контракт не задаёт порядок внутри одного startsAt, а курсору нужен однозначный.

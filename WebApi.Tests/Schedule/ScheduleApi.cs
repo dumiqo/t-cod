@@ -57,12 +57,18 @@ public static class ScheduleApi
 
     public static async Task<long[]> ClassIdsAsync(HttpResponseMessage response)
     {
+        return (await PageAsync(response)).Ids;
+    }
+
+    public static async Task<(long[] Ids, string? Token)> PageAsync(HttpResponseMessage response)
+    {
         var text = await response.Content.ReadAsStringAsync();
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, text);
         using var body = JsonDocument.Parse(text);
-
-        return body.RootElement.GetProperty("items").EnumerateArray()
+        var ids = body.RootElement.GetProperty("items").EnumerateArray()
             .Select(x => x.GetProperty("classId").GetInt64())
             .ToArray();
+
+        return (ids, body.RootElement.GetProperty("continuationToken").GetString());
     }
 }

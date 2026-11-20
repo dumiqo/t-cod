@@ -123,6 +123,27 @@ public class ScheduleRepositoryTests
             rows.Select(x => (x.Id, x.TakenSeats, x.MySeats)).ToArray());
     }
 
+    [TestMethod]
+    public async Task GetSchedulePageAsync_CursorWithEqualStartsAt_ReturnsRowsStrictlyAfterCursorId()
+    {
+        await using var db = await TestDb.CloneAsync();
+        var from = db.SeededAt.UtcDateTime.Date.AddDays(400);
+        var at = from.AddHours(10).AddTicks(10);
+        await using var context = db.CreateContext();
+        var room = await RoomAsync(context, "Hall");
+        await ClassAsync(context, room, at.AddTicks(-10));
+        var first = await ClassAsync(context, room, at);
+        var second = await ClassAsync(context, room, at);
+        var third = await ClassAsync(context, room, at);
+        var later = await ClassAsync(context, room, at.AddTicks(10));
+
+        var rows = await new UnitOfWork(context).Class.GetSchedulePageAsync(
+            new ScheduleQuery(from, from.AddDays(1), null, 10, new ScheduleCursor(at, second.Id)), 0);
+
+        Assert.IsTrue(first.Id < second.Id && second.Id < third.Id);
+        CollectionAssert.AreEqual(new[] { third.Id, later.Id }, rows.Select(x => x.Id).ToArray());
+    }
+
     private static readonly DateTime CreatedAt = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static Enrollment Enrollment(long userId, long classId, int seats, bool cancelled = false)
