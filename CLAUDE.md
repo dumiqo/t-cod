@@ -151,8 +151,10 @@ Source: `ЗАДАНИЕ.md` and `docs/tasks.md`. When they disagree with this fi
 
 - `ЗАДАНИЕ.md` is the source of truth for the contract. `docs/tasks.md` is the index: rules,
   readiness criteria, the task list with statuses. Each task's text (traps and non-obvious points
-  only) lives in `docs/tasks/NN-<name>.md`. Nuances found while working on a task are appended to
-  that task's file; a status change is made in the task's file and in the index together.
+  only) lives in `docs/tasks/NN-<name>.md`. From task 20 on, each subtask has its own file
+  `docs/tasks/NN.M-<name>.md` and the task file keeps the shared text and links. Nuances found while
+  working on a task are appended to that task's (or subtask's) file; a status change is made in the
+  task's (or subtask's) file and in the index together.
 - **No comments in code.** The single exception is `// решение: ...` — one or two lines next to code
   that implements a decision the contract does not dictate, saying what was chosen and why. "Our code"
   is everything added after the `init` commit, tests included (`316d590` too); the given code is not
