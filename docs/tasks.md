@@ -107,7 +107,7 @@
 - [23. Продвижение очереди](tasks/23-waitlist-promotion.md) — проработано
   - [23.1 Продвижение при отмене (§3)](tasks/23.1-promotion-on-cancel.md) — готово (fa7e1a5)
   - [23.2 Продвижение при уменьшении мест (§2)](tasks/23.2-promotion-on-seats-decrease.md) — готово (1dfe85d)
-  - [23.3 Гонки и взаимоблокировка](tasks/23.3-promotion-races.md) — проработано
+  - [23.3 Гонки и взаимоблокировка](tasks/23.3-promotion-races.md) — готово (a7c6cad)
   - [23.4 Наблюдаемость](tasks/23.4-promotion-observability.md) — проработано
 - [24. Исследование: отказ Redis](tasks/24-redis-failure.md) — готово (41a4819)
 - [25. Исследование: кэш карточки](tasks/25-card-cache-research.md)
