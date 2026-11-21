@@ -125,5 +125,5 @@
   - [29.2 Сценарии на сидах](tasks/29.2-seed-scenarios.md) — готово (c35ff6d)
   - [29.3 Инварианты под смешанной нагрузкой](tasks/29.3-mixed-load-invariants.md) — готово (579ba8c)
   - [29.4 Нагрузочный прогон с Redis и без](tasks/29.4-load-run.md) — готово (fb03875)
-  - [29.5 Отказные режимы](tasks/29.5-failure-modes.md) — проработано
+  - [29.5 Отказные режимы](tasks/29.5-failure-modes.md) — готово (003cde1)
 - [30. Подготовка к сдаче](tasks/30-submission.md)
