@@ -30,6 +30,7 @@ public class RepositoryTests
     [TestMethod]
     public async Task EnrollmentWithClassInclude_CancelledClass_IsHiddenByQueryFilter()
     {
+        // решение: тест пишет данные, поэтому работает в своей одноразовой базе, а не в общей базе ApiHost.
         await using var database = await ScratchDatabase.CreateAsync();
         await using var dbContext = database.CreateContext();
         await dbContext.Database.MigrateAsync();
