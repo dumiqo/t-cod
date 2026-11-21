@@ -26,6 +26,7 @@
     <ProjectReference Include="..\Common\Common.csproj" />
     <ProjectReference Include="..\DataAccessLayer\DataAccessLayer.csproj" />
     <ProjectReference Include="..\WebApi\WebApi.csproj" />
+    <ProjectReference Include="..\WebApi.LoadTests\WebApi.LoadTests.csproj" Aliases="load" />
   </ItemGroup>
 
 </Project>

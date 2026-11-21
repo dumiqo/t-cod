@@ -25,7 +25,9 @@ public sealed class RedisGuard
 
             return true;
         }
-        catch (Exception exception) when (exception is RedisConnectionException or TimeoutException)
+        // решение: StackExchange.Redis при зависшем Redis отменяет ждущие команды сам — это отказ Redis, а не 500 (найдено в 29.4); отмену запроса клиентом пробрасываем.
+        catch (Exception exception) when (exception is RedisConnectionException or TimeoutException
+                                          || (exception is OperationCanceledException && !ct.IsCancellationRequested))
         {
             Fail(operation, exception, exception.GetType().Name);
 
