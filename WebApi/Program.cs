@@ -33,7 +33,11 @@ builder.Host.UseDefaultServiceProvider(options =>
 });
 
 // решение: число в кавычках — 400: веб-настройки System.Text.Json читают числа из строк, а в контракте поля числовые.
-builder.Services.AddControllers(options => options.Filters.Add<TransactionConflictFilter>())
+builder.Services.AddControllers(options =>
+    {
+        options.Filters.Add<TransactionConflictFilter>();
+        options.Filters.Add<DatabaseUnavailableFilter>();
+    })
     .AddJsonOptions(options => options.JsonSerializerOptions.NumberHandling = JsonNumberHandling.Strict)
     // решение: описания 429 в ASP.NET 9 нет, без него фабрика ProblemDetails оставит type и title пустыми.
     .ConfigureApiBehaviorOptions(options => options.ClientErrorMapping[StatusCodes.Status429TooManyRequests] = new ClientErrorData

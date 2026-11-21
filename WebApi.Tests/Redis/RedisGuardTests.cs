@@ -23,7 +23,7 @@ public class RedisGuardTests
         var meters = _services.GetRequiredService<IMeterFactory>();
         _failures = new MetricCollector<long>(meters, ClubMetrics.MeterName, "club.redis.failures");
         _logger = new FakeLogger<RedisGuard>();
-        _guard = new RedisGuard(Options.Create(new RedisSettings()), new ClubMetrics(meters), _logger);
+        _guard = new RedisGuard(Options.Create(new RedisSettings()), new ClubMetrics(meters), TimeProvider.System, _logger);
     }
 
     [TestCleanup]

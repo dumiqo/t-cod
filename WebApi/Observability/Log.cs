@@ -43,6 +43,13 @@ public static partial class Log
     public static partial void RedisFailure(ILogger logger, Exception? exception, string operation, string reason);
 
     [LoggerMessage(
+        EventId = 1006,
+        EventName = "DatabaseUnavailable",
+        Level = LogLevel.Warning,
+        Message = "Database unavailable: {Operation} for user {UserId}")]
+    public static partial void DatabaseUnavailable(ILogger logger, Exception exception, string operation, long? userId);
+
+    [LoggerMessage(
         EventId = 2001,
         EventName = "EnrollmentCreated",
         Level = LogLevel.Information,

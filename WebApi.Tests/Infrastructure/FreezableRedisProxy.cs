@@ -11,7 +11,7 @@ public sealed class FreezableRedisProxy : IAsyncDisposable
     private readonly List<TcpClient> _sockets = [];
     private readonly ConfigurationOptions _upstream;
     private readonly Task _accepting;
-    private volatile bool _frozen;
+    private volatile TaskCompletionSource _thawed = Thawed();
 
     private FreezableRedisProxy(string redisConnectionString)
     {
@@ -40,7 +40,12 @@ public sealed class FreezableRedisProxy : IAsyncDisposable
 
     public void Freeze()
     {
-        _frozen = true;
+        _thawed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    public void Unfreeze()
+    {
+        _thawed.TrySetResult();
     }
 
     public async ValueTask DisposeAsync()
@@ -92,6 +97,14 @@ public sealed class FreezableRedisProxy : IAsyncDisposable
         }
     }
 
+    private static TaskCompletionSource Thawed()
+    {
+        var thawed = new TaskCompletionSource();
+        thawed.SetResult();
+
+        return thawed;
+    }
+
     private async Task PumpAsync(NetworkStream from, NetworkStream to)
     {
         var buffer = new byte[8192];
@@ -102,10 +115,8 @@ public sealed class FreezableRedisProxy : IAsyncDisposable
 
             while ((read = await from.ReadAsync(buffer, _stop.Token)) > 0)
             {
-                if (!_frozen)
-                {
-                    await to.WriteAsync(buffer.AsMemory(0, read), _stop.Token);
-                }
+                await _thawed.Task.WaitAsync(_stop.Token);
+                await to.WriteAsync(buffer.AsMemory(0, read), _stop.Token);
             }
         }
         catch (Exception exception) when (exception is OperationCanceledException or IOException or ObjectDisposedException)
