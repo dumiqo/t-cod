@@ -213,6 +213,22 @@ public class ScheduleTests
     }
 
     [TestMethod]
+    public async Task Get_FromWithUnencodedPlusOffset_ConvertsToUtc()
+    {
+        await using var app = await TestApp.StartAsync();
+        var from = FarDay(app).AddHours(10);
+        var hall = await app.Data.RoomAsync("Hall");
+        await app.Data.ClassAsync(startsAt: from.AddMinutes(-1), roomId: hall);
+        var id = await app.Data.ClassAsync(startsAt: from, roomId: hall);
+        using var client = await app.CreateClientAsync(AuthClient.SeededUser);
+        var local = from.AddHours(3).ToString("yyyy-MM-dd'T'HH:mm") + "+03:00";
+
+        using var response = await GetAsync(client, $"from={local}&to={Iso(from.AddHours(1))}");
+
+        await AssertPageAsync(response, Item(id, from, hall, "Hall"));
+    }
+
+    [TestMethod]
     public async Task Get_FromAndToWithinOneMicrosecond_Returns200Empty()
     {
         await using var app = await TestApp.StartAsync();

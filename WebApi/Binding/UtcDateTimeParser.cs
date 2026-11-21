@@ -90,8 +90,10 @@ public static partial class UtcDateTimeParser
         return group.Success ? int.Parse(group.Value, CultureInfo.InvariantCulture) : fallback;
     }
 
+    // решение: пробел на месте знака смещения — это «+», который клиент не закодировал в query (`+` декодируется в пробел);
+    // принимается только там, где иначе было бы 400, — между временем и ±HH:mm.
     [GeneratedRegex(
-        @"^(?<date>[0-9]{4}-[0-9]{2}-[0-9]{2})(?:T(?<hour>[0-9]{2}):(?<minute>[0-9]{2})(?::(?<second>[0-9]{2})(?:\.(?<fraction>[0-9]{1,7}))?)?(?<offset>Z|[+-][0-9]{2}:[0-9]{2})?)?\z",
+        @"^(?<date>[0-9]{4}-[0-9]{2}-[0-9]{2})(?:T(?<hour>[0-9]{2}):(?<minute>[0-9]{2})(?::(?<second>[0-9]{2})(?:\.(?<fraction>[0-9]{1,7}))?)?(?<offset>Z|[+ -][0-9]{2}:[0-9]{2})?)?\z",
         RegexOptions.CultureInvariant)]
     private static partial Regex Pattern();
 }
